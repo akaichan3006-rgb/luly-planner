@@ -134,17 +134,46 @@ function Habitos() {
 
 const HABIT_ICONS = ['flame','droplet','dumbbell','book','leaf','salad','sparkle','heart','check','shield','clock','target'];
 const HABIT_COLORS = ['#9E4A69','#7c93c4','#C67C96','#4f9d7e','#d29a52','#caa7d0','#b04a34','#243D6B','#A75597'];
-const UNIDADES = ['vez','vezes','min','horas','copos','páginas','km','kg','sessão','dia'];
+const UNIDADES_DEFAULT = ['vez','vezes','min','horas','copos','páginas','km','kg','sessão','dia'];
+
+// Unidades customizadas persistidas no localStorage
+function loadUnidades() {
+  try { const s = localStorage.getItem('ps_habit_units'); if (s) return JSON.parse(s); } catch(e) {}
+  return [...UNIDADES_DEFAULT];
+}
+function saveUnidades(list) { localStorage.setItem('ps_habit_units', JSON.stringify(list)); }
 
 function HabitModal({ modal, onSave, onDelete, onClose }) {
   const [f, setF] = useS(() => ({ ...modal.habit }));
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
   const valid = (f.nome || '').trim().length > 0 && (f.meta||0) > 0;
 
+  // ── Unidades customizáveis ────────────────────────────────────────────
+  const [unidades, setUnidades] = useS(loadUnidades);
+  const [editingUnits, setEditingUnits] = useS(false);
+  const [novaUnidade, setNovaUnidade] = useS('');
+
+  const addUnidade = () => {
+    const u = novaUnidade.trim().toLowerCase();
+    if (!u || unidades.includes(u)) { window.showToast && window.showToast('Unidade já existe ou inválida.', 'error'); return; }
+    const next = [...unidades, u];
+    setUnidades(next); saveUnidades(next);
+    set('unidade', u);
+    setNovaUnidade('');
+    window.showToast && window.showToast(`Unidade "${u}" adicionada!`);
+  };
+
+  const removeUnidade = (u) => {
+    if (UNIDADES_DEFAULT.includes(u)) { window.showToast && window.showToast('Não é possível remover unidades padrão.', 'error'); return; }
+    const next = unidades.filter(x => x !== u);
+    setUnidades(next); saveUnidades(next);
+    if (f.unidade === u) set('unidade', next[0] || 'vez');
+  };
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(40,20,30,0.4)',
       backdropFilter: 'blur(4px)', display: 'grid', placeItems: 'center', padding: 20 }}>
-      <GlassCard onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, padding: 24 }}>
+      <GlassCard onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, padding: 24, maxHeight: '92vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
           <h3 className="serif" style={{ margin: 0, fontSize: 24 }}>{modal.mode === 'new' ? 'Novo hábito' : 'Editar hábito'}</h3>
           <button className="icon-btn" onClick={onClose}><Ic.plus size={18} style={{ transform: 'rotate(45deg)' }}/></button>
@@ -164,14 +193,67 @@ function HabitModal({ modal, onSave, onDelete, onClose }) {
             </div>
           </div>
           <div>
-            <label className="ev-label">Unidade</label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label className="ev-label">Unidade</label>
+              <button onClick={() => setEditingUnits(o => !o)}
+                style={{ border: 'none', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3,
+                  fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 700, color: 'var(--primary)', padding: '2px 0',
+                  textTransform: 'uppercase', letterSpacing: 0.4 }}
+                title="Personalizar unidades">
+                <Ic.edit size={11}/>{editingUnits ? 'Fechar' : 'Personalizar'}
+              </button>
+            </div>
             <div className="field" style={{ marginTop: 6, padding: '10px 12px' }}>
               <select value={f.unidade||'vez'} onChange={(e) => set('unidade', e.target.value)} style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontFamily: 'var(--font-ui)', fontSize: 14, color: 'var(--ink)' }}>
-                {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+                {unidades.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
             </div>
           </div>
         </div>
+
+        {/* Painel de personalização de unidades */}
+        {editingUnits && (
+          <div style={{ marginTop: 10, padding: '14px', borderRadius: 14, background: 'var(--chip-bg)', border: '1px solid var(--line)' }}>
+            <div style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--ink-soft)', marginBottom: 10 }}>Personalizar unidades</div>
+            {/* Adicionar nova */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <div className="field" style={{ flex: 1, marginTop: 0 }}>
+                <Ic.plus size={14} style={{ color: 'var(--ink-faint)' }}/>
+                <input value={novaUnidade} onChange={e => setNovaUnidade(e.target.value)}
+                  placeholder="Nova unidade (ex: passos, L, rep…)" maxLength={20}
+                  onKeyDown={e => { if (e.key === 'Enter') addUnidade(); }}/>
+              </div>
+              <button className="btn" style={{ padding: '8px 14px', fontSize: 12.5, flexShrink: 0 }}
+                disabled={!novaUnidade.trim()} onClick={addUnidade}>
+                <Ic.check size={13}/>Adicionar
+              </button>
+            </div>
+            {/* Lista de unidades */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {unidades.map(u => {
+                const isDefault = UNIDADES_DEFAULT.includes(u);
+                const isSelected = f.unidade === u;
+                return (
+                  <div key={u} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 99,
+                    background: isSelected ? `color-mix(in oklab, var(--primary) 15%, transparent)` : 'var(--bg-1)',
+                    border: '1px solid ' + (isSelected ? 'var(--primary)' : 'var(--line)'),
+                    cursor: 'pointer' }}
+                    onClick={() => set('unidade', u)}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: isSelected ? 'var(--primary)' : 'var(--ink)' }}>{u}</span>
+                    {!isDefault && (
+                      <button onClick={e => { e.stopPropagation(); removeUnidade(u); }}
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0,
+                          display: 'flex', alignItems: 'center', color: 'var(--negative)', marginLeft: 2 }}>
+                        <Ic.plus size={10} style={{ transform: 'rotate(45deg)' }}/>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="faint" style={{ fontSize: 11, marginTop: 8 }}>Clique numa unidade para selecioná-la. Unidades padrão não podem ser removidas.</div>
+          </div>
+        )}
 
         <label className="ev-label" style={{ marginTop: 14 }}>Ícone</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 7 }}>
