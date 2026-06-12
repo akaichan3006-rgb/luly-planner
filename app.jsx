@@ -2,14 +2,15 @@
 const { useState: useS, useEffect: useE, useRef: useR } = React;
 
 const NAV = [
-  { id: 'dashboard',  label: 'Dashboard',    icon: 'grid' },
-  { id: 'financeiro', label: 'Financeiro',    icon: 'wallet' },
-  { id: 'agenda',     label: 'Agenda',        icon: 'calMonth' },
-  { id: 'tarefas',    label: 'Tarefas',       icon: 'kanban' },
-  { id: 'metas',      label: 'Metas',         icon: 'target' },
-  { id: 'habitos',    label: 'Hábitos',       icon: 'flame' },
-  { id: 'integracoes',label: 'Integrações',   icon: 'sync' },
-  { id: 'config',     label: 'Configurações', icon: 'settings' },
+  { id: 'dashboard',     label: 'Dashboard',      icon: 'grid' },
+  { id: 'financeiro',    label: 'Financeiro',      icon: 'wallet' },
+  { id: 'investimentos', label: 'Investimentos',   icon: 'arrowUp' },
+  { id: 'agenda',        label: 'Agenda',          icon: 'calMonth' },
+  { id: 'tarefas',       label: 'Tarefas',         icon: 'kanban' },
+  { id: 'metas',         label: 'Metas',           icon: 'target' },
+  { id: 'habitos',       label: 'Hábitos',         icon: 'flame' },
+  { id: 'integracoes',   label: 'Integrações',     icon: 'sync' },
+  { id: 'config',        label: 'Configurações',   icon: 'settings' },
 ];
 
 // Mobile bottom nav shows only first 5 items + "mais"
@@ -241,8 +242,9 @@ function App() {
 
   const go = (s) => { setScreen(s); setDrawerOpen(false); };
   const Screen = {
-    dashboard: Dashboard, financeiro: Financeiro, agenda: Agenda,
-    tarefas: Tarefas, metas: Metas, habitos: Habitos, integracoes: Integrations, config: Settings,
+    dashboard: Dashboard, financeiro: Financeiro, investimentos: Investimentos,
+    agenda: Agenda, tarefas: Tarefas, metas: Metas, habitos: Habitos,
+    integracoes: Integrations, config: Settings,
   }[screen] || Dashboard;
   const current = NAV.find(n => n.id === screen) || NAV[0];
 

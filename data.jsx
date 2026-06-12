@@ -423,3 +423,98 @@ function useHabitStore() {
   return HabitStore;
 }
 window.useHabitStore = useHabitStore;
+
+// ─── InvestmentStore ─────────────────────────────────────────────────────────
+const INVEST_TYPES = ['CDB','Tesouro Direto','LCI','LCA','Fundo','Ações','ETF','Criptomoedas','Poupança','Outro'];
+const INVEST_DEFAULT_INST = ['Nubank','Mercado Pago','Inter'];
+const INVEST_TYPE_COLORS = {
+  'CDB':'#9E4A69','Tesouro Direto':'#7c93c4','LCI':'#4f9d7e','LCA':'#6abfa0',
+  'Fundo':'#d29a52','Ações':'#C67C96','ETF':'#caa7d0','Criptomoedas':'#e07a88',
+  'Poupança':'#9fb2e0','Outro':'#97798a',
+};
+window.INVEST_TYPES = INVEST_TYPES;
+window.INVEST_DEFAULT_INST = INVEST_DEFAULT_INST;
+window.INVEST_TYPE_COLORS = INVEST_TYPE_COLORS;
+
+const InvestmentStore = (() => {
+  const KEY      = 'ps_investments';
+  const INST_KEY = 'ps_invest_institutions';
+  const listeners = new Set();
+  const emit = () => listeners.forEach(l => l());
+
+  let state = _load(KEY, null) || [];
+  let institutions = _load(INST_KEY, null) || [...INVEST_DEFAULT_INST];
+
+  const persist = () => { localStorage.setItem(KEY, JSON.stringify(state)); emit(); };
+  const persistInst = () => { localStorage.setItem(INST_KEY, JSON.stringify(institutions)); emit(); };
+
+  const getAll = () => state;
+  const getInstitutions = () => institutions;
+
+  const add = (inv) => {
+    const rec = { id: _uid('inv'), created_at: new Date().toISOString(), valor_atual: inv.valor, ...inv };
+    state = [...state, rec]; persist(); return rec;
+  };
+  const update = (id, patch) => { state = state.map(i => i.id === id ? { ...i, ...patch } : i); persist(); };
+  const remove = (id) => { state = state.filter(i => i.id !== id); persist(); };
+  const duplicate = (id) => {
+    const orig = state.find(i => i.id === id);
+    if (!orig) return;
+    const rec = { ...orig, id: _uid('inv'), created_at: new Date().toISOString() };
+    state = [...state, rec]; persist(); return rec;
+  };
+
+  const addInstitution = (name) => {
+    const n = name.trim();
+    if (!n || institutions.includes(n)) return false;
+    institutions = [...institutions, n]; persistInst(); return true;
+  };
+  const removeInstitution = (name) => {
+    if (INVEST_DEFAULT_INST.includes(name)) return false;
+    institutions = institutions.filter(i => i !== name); persistInst(); return true;
+  };
+
+  // ── Computed ──
+  const getTotalInvestido = () => state.reduce((s, i) => s + (i.valor || 0), 0);
+  const getTotalAtual     = () => state.reduce((s, i) => s + (i.valor_atual || i.valor || 0), 0);
+  const getRentabilidade  = () => getTotalAtual() - getTotalInvestido();
+
+  const getPorInstituicao = () => {
+    const map = {};
+    state.forEach(i => {
+      if (!map[i.instituicao]) map[i.instituicao] = 0;
+      map[i.instituicao] += (i.valor || 0);
+    });
+    return Object.entries(map).map(([nome, valor]) => ({ nome, valor })).sort((a,b) => b.valor - a.valor);
+  };
+
+  const getPorTipo = () => {
+    const map = {};
+    state.forEach(i => {
+      if (!map[i.tipo]) map[i.tipo] = 0;
+      map[i.tipo] += (i.valor || 0);
+    });
+    return Object.entries(map).map(([tipo, valor]) => ({ tipo, valor, cor: INVEST_TYPE_COLORS[tipo] || '#97798a' })).sort((a,b) => b.valor - a.valor);
+  };
+
+  const getMaiorInstituicao = () => {
+    const p = getPorInstituicao();
+    return p.length > 0 ? p[0].nome : '—';
+  };
+
+  return {
+    getAll, getInstitutions, add, update, remove, duplicate,
+    addInstitution, removeInstitution,
+    getTotalInvestido, getTotalAtual, getRentabilidade,
+    getPorInstituicao, getPorTipo, getMaiorInstituicao,
+    subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
+  };
+})();
+window.InvestmentStore = InvestmentStore;
+
+function useInvestmentStore() {
+  const [, force] = React.useState(0);
+  React.useEffect(() => InvestmentStore.subscribe(() => force(n => n + 1)), []);
+  return InvestmentStore;
+}
+window.useInvestmentStore = useInvestmentStore;
