@@ -10,6 +10,32 @@ function Settings({ theme, setTheme, userName, setUserName }) {
 
   const commit = (v) => { setDraft(v); setUserName(v); };
 
+  // ── Avatar ─────────────────────────────────────────────────────────────
+  const [avatar, setAvatar] = useS(() => localStorage.getItem('ps_avatar') || '');
+  const fileRef = React.useRef(null);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) { window.showToast && window.showToast('Imagem muito grande. Máximo 3 MB.', 'error'); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      localStorage.setItem('ps_avatar', dataUrl);
+      setAvatar(dataUrl);
+      window.dispatchEvent(new Event('ps_avatar_changed'));
+      window.showToast && window.showToast('Foto de perfil atualizada!');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeAvatar = () => {
+    localStorage.removeItem('ps_avatar');
+    setAvatar('');
+    window.dispatchEvent(new Event('ps_avatar_changed'));
+    window.showToast && window.showToast('Foto removida', 'info');
+  };
+
   // cosmetic preferences (demo)
   const [prefs, setPrefs] = useS(() => {
     try { return JSON.parse(localStorage.getItem('ps_prefs')) || {}; } catch (e) { return {}; }
@@ -27,11 +53,30 @@ function Settings({ theme, setTheme, userName, setUserName }) {
           <CardTitle icon="settings" title="Perfil" />
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, paddingTop: 4 }}>
             <div style={{ position: 'relative' }}>
-              <div style={{ width: 86, height: 86, borderRadius: '50%', background: 'linear-gradient(135deg, var(--primary), var(--accent))',
-                display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 700, fontSize: 34, fontFamily: 'var(--font-display)',
-                boxShadow: '0 12px 28px -12px color-mix(in oklab, var(--primary) 80%, transparent)' }}>{initial}</div>
-              <button className="icon-btn" style={{ position: 'absolute', right: -4, bottom: -4, width: 30, height: 30, background: 'var(--bg-1)' }} title="Trocar foto"><Ic.edit size={14}/></button>
+              {avatar ? (
+                <img src={avatar} alt="avatar" style={{ width: 86, height: 86, borderRadius: '50%', objectFit: 'cover',
+                  boxShadow: '0 12px 28px -12px color-mix(in oklab, var(--primary) 80%, transparent)',
+                  border: '3px solid rgba(255,255,255,0.8)' }}/>
+              ) : (
+                <div style={{ width: 86, height: 86, borderRadius: '50%', background: 'linear-gradient(135deg, var(--primary), var(--accent))',
+                  display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 700, fontSize: 34, fontFamily: 'var(--font-display)',
+                  boxShadow: '0 12px 28px -12px color-mix(in oklab, var(--primary) 80%, transparent)' }}>{initial}</div>
+              )}
+              <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange}/>
+              <button className="icon-btn"
+                style={{ position: 'absolute', right: -4, bottom: -4, width: 30, height: 30, background: 'var(--bg-1)',
+                  border: '2px solid var(--line)', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
+                title="Trocar foto" onClick={() => fileRef.current.click()}>
+                <Ic.edit size={14}/>
+              </button>
             </div>
+            {avatar && (
+              <button onClick={removeAvatar} style={{ border: 'none', background: 'none', cursor: 'pointer',
+                fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--negative)', fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Ic.trash size={12}/> Remover foto
+              </button>
+            )}
             <div className="faint" style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}>Seu título dinâmico</div>
             <div className="serif" style={{ fontSize: 22, marginTop: -6, color: 'var(--primary)', whiteSpace: 'nowrap' }}>{possessive}</div>
           </div>
@@ -53,16 +98,6 @@ function Settings({ theme, setTheme, userName, setUserName }) {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 14, background: 'var(--chip-bg)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ color: 'var(--primary)' }}><Ic.sparkle size={18}/></span>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 13.5 }}>Plano Premium</div>
-                <div className="faint" style={{ fontSize: 11.5 }}>Renova em 12 set 2026</div>
-              </div>
-            </div>
-            <button className="btn-ghost btn" style={{ padding: '7px 12px', fontSize: 12.5 }}>Gerenciar</button>
-          </div>
         </GlassCard>
 
         {/* ---------- TEMA + PREFERÊNCIAS ---------- */}

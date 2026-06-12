@@ -177,6 +177,17 @@ function useIsMobile() {
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
+function useAvatar() {
+  const [avatar, setAvatar] = useS(() => localStorage.getItem('ps_avatar') || '');
+  useE(() => {
+    const sync = () => setAvatar(localStorage.getItem('ps_avatar') || '');
+    window.addEventListener('ps_avatar_changed', sync);
+    window.addEventListener('storage', sync);
+    return () => { window.removeEventListener('ps_avatar_changed', sync); window.removeEventListener('storage', sync); };
+  }, []);
+  return avatar;
+}
+
 function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [userName, setUserName] = useUserName();
@@ -184,6 +195,7 @@ function App() {
   const possessive = firstName ? `${firstName}'s` : 'My';
   const plannerTitle = firstName ? `${firstName}'s Planner` : 'My Planner';
   const avatarInitial = (firstName[0] || 'M').toUpperCase();
+  const avatar = useAvatar();
 
   const [screen, setScreen] = useS(() => {
     let s = localStorage.getItem('ps_screen') || 'dashboard';
@@ -283,12 +295,16 @@ function App() {
               <NavItems compact={collapsed} />
             </nav>
             <div className="glass-soft" style={{ padding: collapsed ? 10 : 14, marginTop: 12, display: 'flex', alignItems: 'center', gap: 11 }}>
-              <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-                background: 'linear-gradient(135deg, #D6A1B5, #7c93c4)',
-                display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 700, fontSize: 15 }}>{avatarInitial}</div>
+              {avatar ? (
+                <img src={avatar} alt="avatar" style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
+                  objectFit: 'cover', border: '2px solid rgba(255,255,255,0.7)' }}/>
+              ) : (
+                <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
+                  background: 'linear-gradient(135deg, #D6A1B5, #7c93c4)',
+                  display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 700, fontSize: 15 }}>{avatarInitial}</div>
+              )}
               {!collapsed && <div style={{ flex: 1, minWidth: 0 }}>
                 <EditableName value={userName} onSave={setUserName} />
-                <div className="faint" style={{ fontSize: 11.5 }}>Plano Premium</div>
               </div>}
               {!collapsed && <button className="icon-btn" style={{ width: 32, height: 32 }} title="Sair" onClick={handleLogout}><Ic.logout size={16}/></button>}
             </div>
