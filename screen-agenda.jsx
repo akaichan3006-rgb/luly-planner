@@ -17,12 +17,20 @@ function weekDatesOf(iso) {
   });
 }
 
+// Palette offered when creating a new agenda category
+const CAT_PALETTE = [
+  '#9E4A69','#C67C96','#D6A1B5','#caa7d0','#7c93c4','#9fb2e0',
+  '#4f9d7e','#6abfa0','#d29a52','#e8b86b','#c96079','#e07a88',
+  '#7a5fa8','#5b7fa6','#3a8c8c','#b07848',
+];
+
 function CatLegend() {
+  const cats = useAgendaCats();
   return (
     <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-      {Object.entries(catColors).map(([k, c]) => (
-        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--ink-soft)' }}>
-          <span style={{ width: 9, height: 9, borderRadius: 3, background: c }}/>{k}
+      {cats.map(({ name, color }) => (
+        <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--ink-soft)' }}>
+          <span style={{ width: 9, height: 9, borderRadius: 3, background: color }}/>{name}
         </div>
       ))}
     </div>
@@ -160,7 +168,7 @@ function AgendaDia({ events, store, cursor, setCursor, openNew, openEdit, view, 
             {dayEvents.map((e) => {
               const top = (e.ini - 6) * ROW;
               const height = (e.fim - e.ini) * ROW - 6;
-              const c = catColors[e.cat] || 'var(--primary)';
+              const c = AgendaCatStore.toColorMap()[e.cat] || 'var(--primary)';
               return (
                 <div key={e.id} onClick={() => openEdit(e)} style={{ position: 'absolute', left: 60, right: 6, top, height,
                   background: `color-mix(in oklab, ${c} 16%, var(--bg-1))`, borderLeft: `3px solid ${c}`,
@@ -258,7 +266,7 @@ function AgendaSemana({ events, store, cursor, setCursor, openNew, openEdit, vie
             <div key={d} style={{ position: 'relative', borderLeft: '1px solid var(--line)' }}>
               {HOURS.map(h => <div key={h} onClick={() => openNew({ date: week[di], ini: h, fim: h + 1 })} style={{ height: ROW, borderTop: '1px solid var(--line)', cursor: 'pointer' }}/>)}
               {events.filter(e => e.date === week[di]).map(e => {
-                const c = catColors[e.cat] || 'var(--primary)';
+                const c = AgendaCatStore.toColorMap()[e.cat] || 'var(--primary)';
                 return (
                   <div key={e.id} onClick={() => openEdit(e)} title={`${e.titulo} · ${fmtHr(e.ini)}–${fmtHr(e.fim)}`}
                     style={{ position: 'absolute', left: 3, right: 3, top: (e.ini - 6) * ROW, height: (e.fim - e.ini) * ROW - 4,
@@ -352,7 +360,7 @@ function AgendaMes({ events, store, cursor, setCursor, openNew, openEdit, view, 
                 </div>}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 5 }}>
                   {ev.slice(0, 2).map((e) => {
-                    const c = catColors[e.cat] || 'var(--primary)';
+                    const c = AgendaCatStore.toColorMap()[e.cat] || 'var(--primary)';
                     return (
                       <div key={e.id} onClick={(evt) => { evt.stopPropagation(); openEdit(e); }} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600,
                         background: `color-mix(in oklab, ${c} 18%, var(--bg-1))`, color: 'var(--ink)',
@@ -380,10 +388,30 @@ function EventModal({ modal, onSave, onDelete, onClose }) {
   const fromHM = (s) => { const [h, m] = s.split(':').map(Number); return h + (m || 0) / 60; };
   const valid = f.titulo.trim() && f.fim > f.ini;
 
+  // ── Custom categories ──────────────────────────────────────────────────
+  const cats = useAgendaCats();
+  const colorMap = AgendaCatStore.toColorMap();
+  const [addingCat, setAddingCat] = useS(false);
+  const [newCatName, setNewCatName] = useS('');
+  const [newCatColor, setNewCatColor] = useS(CAT_PALETTE[0]);
+
+  const confirmNewCat = () => {
+    if (!newCatName.trim()) return;
+    const ok = AgendaCatStore.add(newCatName, newCatColor);
+    if (ok) {
+      set('cat', newCatName.trim());
+      setAddingCat(false);
+      setNewCatName('');
+      window.showToast && window.showToast(`Categoria "${newCatName.trim()}" criada!`);
+    } else {
+      window.showToast && window.showToast('Já existe uma categoria com esse nome.', 'error');
+    }
+  };
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(40,20,30,0.4)',
-      backdropFilter: 'blur(4px)', display: 'grid', placeItems: 'center', padding: 20 }}>
-      <GlassCard onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, padding: 24 }}>
+      backdropFilter: 'blur(4px)', display: 'grid', placeItems: 'center', padding: '20px' }}>
+      <GlassCard onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, padding: 24, maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
           <h3 className="serif" style={{ margin: 0, fontSize: 24 }}>{modal.mode === 'new' ? 'Novo compromisso' : 'Editar compromisso'}</h3>
           <button className="icon-btn" onClick={onClose}><Ic.plus size={18} style={{ transform: 'rotate(45deg)' }}/></button>
@@ -397,19 +425,60 @@ function EventModal({ modal, onSave, onDelete, onClose }) {
 
         <label className="ev-label" style={{ marginTop: 14 }}>Categoria</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 7 }}>
-          {Object.keys(catColors).map((cat) => {
-            const on = f.cat === cat;
+          {cats.map(({ name }) => {
+            const color = colorMap[name] || 'var(--primary)';
+            const on = f.cat === name;
             return (
-              <button key={cat} onClick={() => set('cat', cat)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 999,
+              <button key={name} onClick={() => set('cat', name)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 999,
                 cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 600, transition: 'all 0.15s',
                 border: '1px solid ' + (on ? 'transparent' : 'var(--line)'),
-                background: on ? `color-mix(in oklab, ${catColors[cat]} 20%, transparent)` : 'transparent',
+                background: on ? `color-mix(in oklab, ${color} 20%, transparent)` : 'transparent',
                 color: on ? 'var(--ink)' : 'var(--ink-soft)' }}>
-                <span style={{ width: 9, height: 9, borderRadius: '50%', background: catColors[cat] }}/>{cat}
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: color }}/>{name}
               </button>
             );
           })}
+          {!addingCat && (
+            <button onClick={() => setAddingCat(true)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 999,
+              cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 600,
+              border: '1.5px dashed var(--line)', background: 'transparent', color: 'var(--ink-faint)', transition: 'all 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.color = 'var(--primary)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--ink-faint)'; }}>
+              <Ic.plus size={13}/>Nova
+            </button>
+          )}
         </div>
+
+        {addingCat && (
+          <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 14, background: 'var(--chip-bg)',
+            border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--ink-soft)' }}>Nova categoria</div>
+            <div className="field" style={{ marginTop: 0 }}>
+              <Ic.sparkle size={15} style={{ color: 'var(--ink-faint)' }}/>
+              <input value={newCatName} autoFocus onChange={(e) => setNewCatName(e.target.value)}
+                placeholder="Nome da categoria" maxLength={20}
+                onKeyDown={(e) => { if (e.key === 'Enter') confirmNewCat(); if (e.key === 'Escape') setAddingCat(false); }}/>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+              {CAT_PALETTE.map(c => (
+                <button key={c} onClick={() => setNewCatColor(c)}
+                  style={{ width: 22, height: 22, borderRadius: '50%', background: c, border: 'none', cursor: 'pointer',
+                    outline: newCatColor === c ? `3px solid ${c}` : '2px solid transparent',
+                    outlineOffset: 2, transform: newCatColor === c ? 'scale(1.25)' : 'none',
+                    transition: 'transform 0.15s, outline 0.15s' }}/>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-ghost" style={{ fontSize: 12.5, padding: '6px 12px' }}
+                onClick={() => { setAddingCat(false); setNewCatName(''); }}>Cancelar</button>
+              <button className="btn" style={{ fontSize: 12.5, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 5 }}
+                disabled={!newCatName.trim()} onClick={confirmNewCat}
+                onKeyDown={(e) => e.key === 'Enter' && confirmNewCat()}>
+                <Ic.check size={14}/>Criar
+              </button>
+            </div>
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 14 }}>
           <div>

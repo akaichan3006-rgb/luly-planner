@@ -144,6 +144,59 @@ const EventStore = (() => {
 })();
 window.EventStore = EventStore;
 
+// ── Agenda category store ─────────────────────────────────────────────────────
+const AgendaCatStore = (() => {
+  const KEY = 'ps_agenda_cats';
+  const DEFAULT_CATS = [
+    { name: 'Trabalho',    color: '#9E4A69' },
+    { name: 'Estudos',     color: '#7c93c4' },
+    { name: 'Saúde',       color: '#4f9d7e' },
+    { name: 'Financeiro',  color: '#d29a52' },
+    { name: 'Pessoal',     color: '#C67C96' },
+    { name: 'Casamento',   color: '#D6A1B5' },
+    { name: 'Veterinária', color: '#caa7d0' },
+  ];
+
+  const listeners = new Set();
+  const emit = () => listeners.forEach(fn => fn());
+
+  function load() {
+    try { const r = localStorage.getItem(KEY); if (r) return JSON.parse(r); } catch (e) {}
+    return null;
+  }
+
+  let cats = load() || DEFAULT_CATS.map(c => ({ ...c }));
+
+  const persist = () => { localStorage.setItem(KEY, JSON.stringify(cats)); emit(); };
+
+  return {
+    getAll: () => cats,
+    toColorMap: () => Object.fromEntries(cats.map(c => [c.name, c.color])),
+    add(name, color) {
+      const trimmed = name.trim();
+      if (!trimmed || cats.find(c => c.name.toLowerCase() === trimmed.toLowerCase())) return false;
+      cats = [...cats, { name: trimmed, color }];
+      persist();
+      return true;
+    },
+    remove(name) {
+      if (DEFAULT_CATS.find(c => c.name === name)) return false; // protect defaults
+      cats = cats.filter(c => c.name !== name);
+      persist();
+      return true;
+    },
+    subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
+  };
+})();
+window.AgendaCatStore = AgendaCatStore;
+
+function useAgendaCats() {
+  const [, force] = React.useState(0);
+  React.useEffect(() => AgendaCatStore.subscribe(() => force(n => n + 1)), []);
+  return AgendaCatStore.getAll();
+}
+window.useAgendaCats = useAgendaCats;
+
 function useEventStore() {
   const [, force] = React.useState(0);
   React.useEffect(() => EventStore.subscribe(() => force((n) => n + 1)), []);
