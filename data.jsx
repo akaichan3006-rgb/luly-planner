@@ -23,7 +23,12 @@ window.catColors = catColors;
 const prioColor = { Alta: '#c96079', Média: '#d29a52', Baixa: '#4f9d7e' };
 window.prioColor = prioColor;
 
-const ICON_LIST = ['wallet','heart','shield','car','plane','cap','sparkle','rings','droplet','leaf','flame','dumbbell','book','salad','target','grid','calMonth'];
+const ICON_LIST = [
+  'wallet','heart','shield','car','plane','cap','sparkle','rings',
+  'droplet','leaf','flame','dumbbell','book','salad','target','grid',
+  'calMonth','sun','bell','clock','pin','cart','bus','paw','tv',
+  'receipt','link','sync','settings','kanban','edit','search',
+];
 const CAT_FINANCE = ['Alimentação','Moradia','Mercado','Saúde','Transporte','Pets','Estudos','Casamento','Lazer','Assinaturas','Outros'];
 const TASK_TAGS   = Object.keys(catColors);
 window.ICON_LIST  = ICON_LIST;
