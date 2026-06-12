@@ -2,13 +2,40 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Luly Planner · Organização & Finanças</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#9E4A69">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Luly Planner">
+  <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/images/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/images/icon-512.png">
+
+  <!-- Splash screens iOS (portrait) -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Luly Planner">
+  <meta property="og:description" content="Planner pessoal completo — finanças, agenda, hábitos e metas">
+  <meta property="og:image" content="/images/icon-512.png">
+
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="app-bg"></div>
   <div id="root"></div>
+
+  <!-- Offline banner (shown by SW logic) -->
+  <div id="offline-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;
+    background:rgba(158,74,105,0.92);backdrop-filter:blur(8px);color:#fff;
+    text-align:center;padding:10px 16px;font-size:13px;font-weight:600;
+    box-shadow:0 -4px 20px rgba(158,74,105,0.4);">
+    📡 Modo Offline — alterações serão sincronizadas quando a conexão retornar.
+  </div>
 
   <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
@@ -29,5 +56,37 @@
   <script type="text/babel" src="screen-integrations.jsx"></script>
   <script type="text/babel" src="screen-settings.jsx"></script>
   <script type="text/babel" src="app.jsx"></script>
+
+  <script>
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('[PWA] SW registered:', reg.scope))
+          .catch(err => console.warn('[PWA] SW failed:', err));
+      });
+    }
+
+    // Offline/online banner
+    const banner = document.getElementById('offline-banner');
+    function updateOnlineStatus() {
+      banner.style.display = navigator.onLine ? 'none' : 'block';
+    }
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+
+    // PWA install prompt — exposed globally for the Settings screen
+    window._pwaInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      window._pwaInstallPrompt = e;
+      document.dispatchEvent(new Event('pwa-installable'));
+    });
+    window.addEventListener('appinstalled', () => {
+      window._pwaInstallPrompt = null;
+      document.dispatchEvent(new Event('pwa-installed'));
+    });
+  </script>
 </body>
 </html>
