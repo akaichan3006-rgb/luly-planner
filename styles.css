@@ -1,0 +1,497 @@
+/* ============================================================
+   Planner Sakura — Liquid Glass Design System
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
+
+:root {
+  /* Sakura palette */
+  --sakura-kiss: #9E4A69;
+  --blossom-blush: #C67C96;
+  --faded-petal: #D6A1B5;
+  --cherry-mist: #E8C8D9;
+  --morning-dew: #CBD8EC;
+
+  /* Glass tuning (overridable via Tweaks) */
+  --glass-blur: 22px;
+  --glass-saturate: 180%;
+  --glass-alpha: 0.55;
+  --glass-radius: 22px;
+  --glass-border-alpha: 0.65;
+  --glass-tint: 255, 255, 255;
+
+  --font-ui: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Instrument Serif', Georgia, serif;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---------- Light Sakura ---------- */
+:root, [data-theme="light"] {
+  --bg-0: #fbeef4;
+  --bg-1: #f6e3ee;
+  --ink: #3a2530;
+  --ink-soft: #6e5560;
+  --ink-faint: #9b8089;
+  --line: rgba(158, 74, 105, 0.14);
+  --line-strong: rgba(158, 74, 105, 0.22);
+  --primary: #9E4A69;
+  --primary-soft: #C67C96;
+  --accent: #7c93c4;
+  --positive: #4f9d7e;
+  --negative: #c96079;
+  --warn: #d29a52;
+  --glass-tint: 255, 255, 255;
+  --glass-alpha: 0.55;
+  --glass-border-alpha: 0.7;
+  --card-shadow: 0 14px 40px -18px rgba(116, 47, 76, 0.45), 0 2px 8px -4px rgba(116, 47, 76, 0.25);
+  --inner-hi: rgba(255, 255, 255, 0.85);
+  --chip-bg: rgba(255, 255, 255, 0.5);
+  /* canonical palette aliases */
+  --secondary: #C67C96;
+  --surface: #E8C8D9;
+  --background: #fbeef4;
+  --text: #3a2530;
+  --border: #C67C96;
+  --sakura-kiss: #9E4A69;
+  --blossom-blush: #C67C96;
+  --petal1: #ffd9e6;
+  --petal2: #d6849f;
+}
+
+/* ---------- Dark Sakura ---------- */
+[data-theme="dark"] {
+  --bg-0: #1a1016;
+  --bg-1: #241420;
+  --ink: #f3e3ec;
+  --ink-soft: #c7aab8;
+  --ink-faint: #97798a;
+  --line: rgba(230, 200, 217, 0.12);
+  --line-strong: rgba(230, 200, 217, 0.2);
+  --primary: #e29bb5;
+  --primary-soft: #c67c96;
+  --accent: #9fb2e0;
+  --positive: #6fc4a0;
+  --negative: #e8889f;
+  --warn: #e2b06a;
+  --glass-tint: 56, 32, 46;
+  --glass-alpha: 0.5;
+  --glass-border-alpha: 0.35;
+  --card-shadow: 0 18px 50px -20px rgba(0, 0, 0, 0.7), 0 2px 10px -4px rgba(0, 0, 0, 0.5);
+  --inner-hi: rgba(255, 255, 255, 0.16);
+  --chip-bg: rgba(255, 255, 255, 0.06);
+  --secondary: #c67c96;
+  --surface: #3a202e;
+  --background: #1a1016;
+  --text: #f3e3ec;
+  --border: #5a3548;
+  --sakura-kiss: #b85c7d;
+  --blossom-blush: #e29bb5;
+  --petal1: #7a3a52;
+  --petal2: #b85c7d;
+}
+
+/* ============================================================
+   SEASONAL THEMES — all light-surface; frosted glass stays white,
+   text stays dark, palette drives hue. Internal aliases are derived
+   from the 7 canonical tokens so every component recolors.
+   ============================================================ */
+[data-theme="autumn"] {
+  --primary: #B04A34;
+  --secondary: #D9A13A;
+  --accent: #4D6B47;
+  --surface: #5B3F46;
+  --background: #F5EFE9;
+  --text: #3A2D28;
+  --border: #A55C35;
+  --positive: #4D6B47;
+  --negative: #B04A34;
+  --warn: #D9A13A;
+  --petal1: #E8B45A;
+  --petal2: #B04A34;
+}
+[data-theme="winter"] {
+  --primary: #243D6B;
+  --secondary: #6A4377;
+  --accent: #0F5660;
+  --surface: #38448A;
+  --background: #EEF2F7;
+  --text: #1F2430;
+  --border: #5A4560;
+  --positive: #0F5660;
+  --negative: #8a3b63;
+  --warn: #5A4560;
+  --petal1: #d4e4f7;
+  --petal2: #9bb6e0;
+}
+[data-theme="summer"] {
+  --primary: #A75597;
+  --secondary: #8A70AF;
+  --accent: #6D63B5;
+  --surface: #6D63B5;
+  --background: #F8F6FB;
+  --text: #444444;
+  --border: #A0A2C9;
+  --positive: #4f9d7e;
+  --negative: #A75597;
+  --warn: #8A70AF;
+  --petal1: #E6C4E0;
+  --petal2: #A75597;
+}
+[data-theme="spring"] {
+  --primary: #F35C68;
+  --secondary: #F29180;
+  --accent: #8FA60E;
+  --surface: #F4C08A;
+  --background: #FFFDF8;
+  --text: #444444;
+  --border: #F35C68;
+  --positive: #8FA60E;
+  --negative: #F35C68;
+  --warn: #E0B84E;
+  --petal1: #FAD9A0;
+  --petal2: #F29180;
+}
+/* Shared derivation for every seasonal (light) theme */
+[data-theme="autumn"], [data-theme="winter"], [data-theme="summer"], [data-theme="spring"] {
+  --bg-0: var(--background);
+  --bg-1: var(--background);
+  --ink: var(--text);
+  --ink-soft: color-mix(in oklab, var(--text) 64%, var(--background));
+  --ink-faint: color-mix(in oklab, var(--text) 42%, var(--background));
+  --line: color-mix(in oklab, var(--border) 30%, transparent);
+  --line-strong: color-mix(in oklab, var(--border) 48%, transparent);
+  --primary-soft: var(--secondary);
+  --glass-tint: 255, 255, 255;
+  --glass-alpha: 0.55;
+  --glass-border-alpha: 0.72;
+  --card-shadow: 0 14px 40px -18px color-mix(in oklab, var(--surface) 60%, transparent), 0 2px 8px -5px color-mix(in oklab, var(--surface) 35%, transparent);
+  --inner-hi: rgba(255, 255, 255, 0.85);
+  --chip-bg: rgba(255, 255, 255, 0.5);
+  --sakura-kiss: var(--primary);
+  --blossom-blush: var(--secondary);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: var(--font-ui);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--bg-0);
+  overflow: hidden;
+}
+
+/* Animated blossom backdrop — gives the glass something to refract.
+   Built from theme tokens so it recolors with every palette. */
+.app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(60% 50% at 12% 8%, color-mix(in oklab, var(--primary) 42%, transparent), transparent 60%),
+    radial-gradient(55% 45% at 92% 10%, color-mix(in oklab, var(--accent) 40%, transparent), transparent 60%),
+    radial-gradient(60% 60% at 85% 92%, color-mix(in oklab, var(--secondary) 46%, transparent), transparent 62%),
+    radial-gradient(50% 50% at 8% 95%, color-mix(in oklab, var(--surface) 30%, transparent), transparent 60%),
+    var(--bg-1);
+}
+[data-theme="dark"] .app-bg {
+  background:
+    radial-gradient(60% 50% at 12% 8%, color-mix(in oklab, var(--primary) 38%, transparent), transparent 60%),
+    radial-gradient(55% 45% at 92% 10%, color-mix(in oklab, var(--accent) 34%, transparent), transparent 60%),
+    radial-gradient(60% 60% at 85% 92%, color-mix(in oklab, var(--secondary) 40%, transparent), transparent 62%),
+    radial-gradient(50% 50% at 8% 95%, color-mix(in oklab, var(--surface) 90%, transparent), transparent 60%),
+    var(--bg-1);
+}
+.app-bg::before, .app-bg::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.55;
+  animation: drift 24s var(--ease) infinite alternate;
+}
+.app-bg::before {
+  width: 42vw; height: 42vw;
+  left: -6vw; top: -8vw;
+  background: radial-gradient(circle, color-mix(in oklab, var(--primary) 80%, transparent), transparent 70%);
+}
+.app-bg::after {
+  width: 38vw; height: 38vw;
+  right: -8vw; bottom: -10vw;
+  background: radial-gradient(circle, color-mix(in oklab, var(--accent) 75%, transparent), transparent 70%);
+  animation-delay: -12s;
+}
+@keyframes drift {
+  from { transform: translate(0,0) scale(1); }
+  to { transform: translate(40px, 30px) scale(1.12); }
+}
+
+/* falling petals */
+.petal {
+  position: fixed;
+  top: -24px;
+  z-index: 1;
+  width: 14px; height: 14px;
+  background: radial-gradient(circle at 30% 30%, var(--petal1), var(--petal2));
+  border-radius: 14px 1px 14px 1px;
+  opacity: 0.55;
+  pointer-events: none;
+  animation: fall linear infinite;
+}
+@keyframes fall {
+  0% { transform: translateY(-5vh) translateX(0) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.6; }
+  100% { transform: translateY(108vh) translateX(14vw) rotate(420deg); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-bg::before, .app-bg::after, .petal { animation: none; }
+}
+
+/* ============================================================
+   LIQUID GLASS
+   ============================================================ */
+.glass {
+  position: relative;
+  background: rgba(var(--glass-tint), var(--glass-alpha));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid rgba(var(--glass-tint), var(--glass-border-alpha));
+  border-radius: var(--glass-radius);
+  box-shadow: var(--card-shadow);
+}
+/* specular top highlight + edge sheen */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg, var(--inner-hi), transparent 38%, transparent 62%, rgba(158,74,105,0.18));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255,255,255,0.10), transparent 30%);
+  pointer-events: none;
+}
+[data-theme="dark"] .glass::after {
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), transparent 30%);
+}
+
+.glass-soft {
+  background: rgba(var(--glass-tint), calc(var(--glass-alpha) * 0.55));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.7)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.7)) saturate(var(--glass-saturate));
+  border: 1px solid rgba(var(--glass-tint), calc(var(--glass-border-alpha) * 0.7));
+  border-radius: 16px;
+}
+
+/* ============================================================
+   PRIMITIVES
+   ============================================================ */
+.btn {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 14px;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.18s var(--ease), box-shadow 0.2s var(--ease), background 0.2s;
+  color: #fff;
+  background: linear-gradient(135deg, var(--sakura-kiss), var(--blossom-blush));
+  box-shadow: 0 8px 20px -8px rgba(158,74,105,0.7);
+}
+.btn:hover { transform: translateY(-1px); box-shadow: 0 12px 26px -8px rgba(158,74,105,0.8); }
+.btn:active { transform: translateY(0); }
+.btn-ghost {
+  background: rgba(var(--glass-tint), 0.4);
+  color: var(--ink);
+  box-shadow: none;
+  border: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.btn-ghost:hover { background: rgba(var(--glass-tint), 0.65); box-shadow: none; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+
+.icon-btn {
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(var(--glass-tint), 0.4);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.18s var(--ease);
+}
+.icon-btn:hover { color: var(--primary); background: rgba(var(--glass-tint), 0.7); transform: translateY(-1px); }
+
+.serif { font-family: var(--font-display); font-weight: 400; letter-spacing: 0.2px; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(158,74,105,0.25); border-radius: 10px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(158,74,105,0.4); background-clip: content-box; }
+
+/* utility */
+.muted { color: var(--ink-soft); }
+.faint { color: var(--ink-faint); }
+.pos { color: var(--positive); }
+.neg { color: var(--negative); }
+
+/* entrance — kept as a harmless hook; no persistent CSS animation so the
+   DOM stays clean and fully renderable in all contexts */
+.rise { }
+
+/* ============================================================
+   LOGIN + BLOOM ANIMATION
+   ============================================================ */
+.login-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 38px 34px 30px;
+  text-align: center;
+  animation: loginCardIn 0.7s var(--ease) both;
+}
+@keyframes loginCardIn {
+  from { transform: translateY(26px) scale(0.97); }
+  to { transform: none; }
+}
+.login-logo {
+  width: 88px; height: 88px; border-radius: 50%;
+  object-fit: cover; margin: 0 auto 18px;
+  border: 3px solid rgba(255,255,255,0.8);
+  box-shadow: 0 16px 36px -14px rgba(158,74,105,0.7);
+  animation: logoFloat 4.5s ease-in-out infinite;
+}
+@keyframes logoFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
+.field {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; margin-top: 12px;
+  border-radius: 14px;
+  background: rgba(var(--glass-tint), 0.45);
+  border: 1px solid var(--line);
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+.field:focus-within {
+  border-color: color-mix(in oklab, var(--primary) 55%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 14%, transparent);
+  background: rgba(var(--glass-tint), 0.7);
+}
+.field input {
+  flex: 1; border: none; background: none; outline: none;
+  font-family: var(--font-ui); font-size: 14.5px; color: var(--ink);
+}
+.field input::placeholder { color: var(--ink-faint); }
+.field textarea::placeholder { color: var(--ink-faint); }
+
+.ev-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding-left: 2px;
+}
+/* native pickers tinted to theme */
+.field input[type="date"], .field input[type="time"] { color: var(--ink); }
+.field input::-webkit-calendar-picker-indicator { filter: saturate(0.6); opacity: 0.55; cursor: pointer; }
+
+.spin { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* bloom overlay */
+.bloom {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  border-radius: inherit;
+  background: rgba(var(--glass-tint), 0.55);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+.bloom-logo {
+  width: 104px; height: 104px; border-radius: 50%;
+  object-fit: cover; border: 3px solid rgba(255,255,255,0.85);
+  box-shadow: 0 18px 40px -12px rgba(158,74,105,0.8);
+  animation: popSpring 0.8s var(--ease) both;
+  position: relative; z-index: 2;
+}
+@keyframes popSpring {
+  0% { transform: scale(0.45) rotate(-22deg); }
+  60% { transform: scale(1.16) rotate(8deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.halo {
+  position: absolute; width: 104px; height: 104px; border-radius: 50%;
+  border: 3px solid var(--primary);
+  animation: halo 1.1s var(--ease) 0.15s both;
+}
+.halo.h2 { animation-delay: 0.4s; border-color: var(--blossom-blush); }
+@keyframes halo {
+  0% { transform: scale(0.5); opacity: 0.85; }
+  100% { transform: scale(2.9); opacity: 0; }
+}
+.burst-petal {
+  position: absolute; width: 16px; height: 16px;
+  background: radial-gradient(circle at 32% 30%, #ffd9e6, #d6849f);
+  border-radius: 16px 2px 16px 2px;
+  animation: burst 1.15s var(--ease) 0.1s both;
+}
+@keyframes burst {
+  0% { transform: translate(0,0) scale(0.2) rotate(0deg); opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty)) scale(1) rotate(var(--r)); opacity: 0; }
+}
+.welcome-text {
+  position: absolute; bottom: 40px; left: 0; right: 0;
+  animation: welcomeUp 0.6s var(--ease) 0.5s both;
+}
+@keyframes welcomeUp {
+  from { transform: translateY(16px); }
+  to { transform: none; }
+}
+.fade-away { animation: fadeAway 0.55s var(--ease) both; }
+@keyframes fadeAway { to { opacity: 0; transform: scale(0.96); } }
+.app-fade-in { animation: appFadeIn 0.7s var(--ease) both; }
+@keyframes appFadeIn { from { transform: scale(1.012); } to { transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .login-logo, .bloom-logo, .halo, .burst-petal, .welcome-text, .login-card, .app-fade-in { animation: none !important; }
+}
