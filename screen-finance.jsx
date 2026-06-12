@@ -44,8 +44,59 @@ function Financeiro({ go }) {
     <div className="screen">
       <PageHeader title="Controle Financeiro" sub="Acompanhe entradas, saídas e para onde seu dinheiro vai.">
         <button className="btn-ghost btn" onClick={() => setCardModal({ mode: 'list' })}><Ic.wallet size={16}/>Cartões</button>
+        <button className="btn-ghost btn" onClick={() => go('investimentos')} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <Ic.arrowUp size={16}/>Investimentos
+        </button>
         <button className="btn" onClick={openNew}><Ic.plus size={16}/>Novo lançamento</button>
       </PageHeader>
+
+      {/* Atalho investimentos */}
+      {(() => {
+        const invStore = window.InvestmentStore;
+        if (!invStore) return null;
+        const total = invStore.getTotalInvestido();
+        const rentab = invStore.getRentabilidade();
+        const qtd = invStore.getAll().length;
+        if (total === 0) return (
+          <div onClick={() => go('investimentos')} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 18px', borderRadius: 16,
+            background: 'color-mix(in oklab, var(--primary) 8%, transparent)', border: '1.5px dashed color-mix(in oklab, var(--primary) 35%, transparent)',
+            cursor: 'pointer', marginBottom: 16, transition: 'all 0.18s' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in oklab, var(--primary) 14%, transparent)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'color-mix(in oklab, var(--primary) 8%, transparent)'}>
+            <span style={{ color: 'var(--primary)' }}><Ic.arrowUp size={20}/></span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--primary)' }}>Módulo de Investimentos</div>
+              <div className="faint" style={{ fontSize: 12.5 }}>Registre CDB, Tesouro, Ações e muito mais. Clique para acessar.</div>
+            </div>
+            <span style={{ color: 'var(--primary)' }}><Ic.chevR size={16}/></span>
+          </div>
+        );
+        return (
+          <div onClick={() => go('investimentos')} style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '14px 18px', borderRadius: 16,
+            background: 'color-mix(in oklab, var(--primary) 8%, transparent)', border: '1px solid color-mix(in oklab, var(--primary) 20%, transparent)',
+            cursor: 'pointer', marginBottom: 16, transition: 'all 0.18s' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in oklab, var(--primary) 14%, transparent)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'color-mix(in oklab, var(--primary) 8%, transparent)'}>
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: 'color-mix(in oklab, var(--primary) 18%, transparent)',
+              display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+              <Ic.arrowUp size={20} style={{ color: 'var(--primary)' }}/>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--primary)', marginBottom: 2 }}>Carteira de Investimentos</div>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600 }}>{brl(total)} investidos</span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: rentab >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
+                  {rentab >= 0 ? '+' : ''}{brl(rentab)} rentabilidade
+                </span>
+                <span className="faint" style={{ fontSize: 12 }}>{qtd} aplicaç{qtd === 1 ? 'ão' : 'ões'}</span>
+              </div>
+            </div>
+            <span className="faint" style={{ fontSize: 12.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+              Ver detalhes <Ic.chevR size={14}/>
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Stat cards */}
       <div className="stat-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 16 }}>

@@ -2,6 +2,7 @@
 function Dashboard({ go }) {
   const eventStore = useEventStore();
   const finStore = useFinanceStore();
+  const invStore = useInvestmentStore();
   const taskStore = useTaskStore();
   const goalStore = useGoalStore();
   const habitStore = useHabitStore();
@@ -130,6 +131,69 @@ function Dashboard({ go }) {
           </GlassCard>
         </div>
       </div>
+
+      {/* Investimentos resumo */}
+      {(() => {
+        const total = invStore.getTotalInvestido();
+        const rentab = invStore.getRentabilidade();
+        const porInst = invStore.getPorInstituicao();
+        const institutions = invStore.getInstitutions();
+        const INST_COLORS_DASH = ['#9E4A69','#7c93c4','#4f9d7e','#d29a52','#C67C96','#caa7d0','#e07a88','#6abfa0'];
+        const instColor = (nome) => INST_COLORS_DASH[institutions.indexOf(nome) % INST_COLORS_DASH.length] || '#97798a';
+        return (
+          <GlassCard style={{ padding: 22, marginTop: 16 }}>
+            <CardTitle icon="arrowUp" title="Investimentos" action="Ver carteira" onAction={() => go('investimentos')} />
+            {total === 0 ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 0' }}>
+                <div className="faint" style={{ fontSize: 13 }}>Nenhum investimento registrado ainda.</div>
+                <button className="btn" style={{ marginLeft: 'auto', padding: '8px 16px', fontSize: 13 }} onClick={() => go('investimentos')}>
+                  <Ic.plus size={14}/>Começar a investir
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 24, marginTop: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+                {/* Totais */}
+                <div style={{ display: 'flex', gap: 20 }}>
+                  <div>
+                    <div className="faint" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>Total investido</div>
+                    <div style={{ fontWeight: 800, fontSize: 20, color: 'var(--primary)', marginTop: 3 }}>{brl(total)}</div>
+                  </div>
+                  <div>
+                    <div className="faint" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>Rentabilidade</div>
+                    <div style={{ fontWeight: 800, fontSize: 20, color: rentab >= 0 ? 'var(--positive)' : 'var(--negative)', marginTop: 3 }}>
+                      {rentab >= 0 ? '+' : ''}{brl(rentab)}
+                    </div>
+                  </div>
+                </div>
+                {/* Divisor */}
+                <div style={{ width: 1, height: 46, background: 'var(--line)', flexShrink: 0 }}/>
+                {/* Por instituição */}
+                <div style={{ flex: 1, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {porInst.slice(0, 5).map(p => {
+                    const cor = instColor(p.nome);
+                    const pct = total > 0 ? (p.valor / total * 100).toFixed(0) : 0;
+                    return (
+                      <div key={p.nome} style={{ display: 'flex', flex: '1 1 120px', alignItems: 'center', gap: 9,
+                        padding: '10px 12px', borderRadius: 12, background: 'var(--chip-bg)', cursor: 'pointer',
+                        border: '1px solid var(--line)', minWidth: 110, transition: 'all 0.15s' }}
+                        onClick={() => go('investimentos')}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = cor}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line)'}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: cor, flexShrink: 0 }}/>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nome}</div>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: cor }}>{brl(p.valor)}</div>
+                        </div>
+                        <div className="faint" style={{ fontSize: 11, marginLeft: 'auto', fontWeight: 600 }}>{pct}%</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </GlassCard>
+        );
+      })()}
 
       {/* bottom row: tasks + goals */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
