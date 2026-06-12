@@ -295,10 +295,10 @@ function Legend({ color, label }) {
 }
 
 // ── TransactionModal ──────────────────────────────────────────────────────────
-const TIPO_OPTIONS = [
-  { id: 'credito',            label: 'Crédito',          sub: 'Entrada de dinheiro',    icon: 'arrowDown', color: 'var(--positive)' },
-  { id: 'debito',             label: 'Débito',            sub: 'Saída de dinheiro',      icon: 'arrowUp',   color: 'var(--negative)' },
-  { id: 'credito_parcelado',  label: 'Crédito Parcelado', sub: 'Compra parcelada',       icon: 'receipt',   color: 'var(--warn)' },
+const SAIDA_OPTIONS = [
+  { id: 'debito',            label: 'Débito',           sub: 'Pagamento à vista',    icon: 'arrowUp',  color: 'var(--negative)' },
+  { id: 'credito',           label: 'Crédito',          sub: 'Cartão de crédito',    icon: 'wallet',   color: '#7c93c4' },
+  { id: 'credito_parcelado', label: 'Parcelado',        sub: 'Compra parcelada',     icon: 'receipt',  color: 'var(--warn)' },
 ];
 const RECEITA_CATS = ['Salário','Freelance','Comissão','Rendimentos','Dividendos','Aluguel recebido','Outros'];
 
@@ -309,19 +309,26 @@ function TransactionModal({ modal, onSave, onDelete, onClose, catStore, cardStor
   // Determine initial tipo_lancamento from existing entry
   const initTipo = () => {
     if (!isEdit) return null;
-    if (entry._tipo === 'receita') return 'credito';
+    if (entry._tipo === 'receita') return 'entrada';
     if (entry.installment_group_id) return 'credito_parcelado';
     return 'debito';
   };
 
-  const [step, setStep]   = useS(isEdit ? 'form' : 'tipo'); // 'tipo' | 'form'
+  // step: 'fluxo' → 'saida_tipo' → 'form'
+  const initStep = () => {
+    if (isEdit) return 'form';
+    return 'fluxo';
+  };
+
+  const [step, setStep]   = useS(initStep); // 'fluxo' | 'saida_tipo' | 'form'
+  const [fluxo, setFluxo] = useS(isEdit ? (entry._tipo === 'receita' ? 'entrada' : 'saida') : null);
   const [tipo, setTipo]   = useS(initTipo);
   const [f, setF]         = useS(() => isEdit ? { ...entry, parcelas: entry.total_installments || 2 } : {
     desc: '', cat: '', valor: '', dia: new Date().getDate(), recorrente: false, card_id: '', parcelas: 2,
   });
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
 
-  const isReceita = tipo === 'credito';
+  const isReceita = fluxo === 'entrada';
   const isParcelado = tipo === 'credito_parcelado';
 
   // Category lists
@@ -332,10 +339,10 @@ function TransactionModal({ modal, onSave, onDelete, onClose, catStore, cardStor
   const despesaCats   = [...CAT_FINANCE,  ...customDespesa];
   const cats = isReceita ? receitaCats : despesaCats;
 
-  // Auto-select first category when switching tipo
+  // Auto-select first category when switching fluxo/tipo
   useE(() => {
-    if (tipo && !isEdit) set('cat', isReceita ? receitaCats[0] : despesaCats[0]);
-  }, [tipo]);
+    if (fluxo && !isEdit) set('cat', isReceita ? receitaCats[0] : despesaCats[0]);
+  }, [fluxo, tipo]);
 
   const cards = cardStore ? cardStore.getAll() : [];
 
@@ -350,30 +357,78 @@ function TransactionModal({ modal, onSave, onDelete, onClose, catStore, cardStor
       tipo_lancamento: tipo,
       parcelas: isParcelado ? parseInt(f.parcelas) : undefined,
     };
-    onSave(data, isReceita ? 'receita' : 'despesa');
+    onSave(data, fluxo === 'entrada' ? 'receita' : 'despesa');
   };
 
   const valorParcela = isParcelado && parseFloat(f.valor) > 0 && parseInt(f.parcelas) >= 2
     ? parseFloat(f.valor) / parseInt(f.parcelas)
     : 0;
 
-  // ── Step 1: choose tipo ───────────────────────────────────────────────────
-  if (step === 'tipo') {
+  // ── Step 1: Entrada ou Saída ─────────────────────────────────────────────
+  if (step === 'fluxo') {
     return (
       <ModalShell title="Novo lançamento" onClose={onClose}>
+        <p className="faint" style={{ fontSize: 13, margin: '0 0 20px', textAlign: 'center' }}>
+          O dinheiro está entrando ou saindo?
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          {/* Entrada */}
+          <button onClick={() => { setFluxo('entrada'); setTipo('entrada'); setStep('form'); }}
+            style={{ padding: '28px 16px', borderRadius: 18, border: '2px solid var(--line)',
+              background: 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column',
+              alignItems: 'center', gap: 12, transition: 'all 0.18s var(--ease)', fontFamily: 'var(--font-ui)' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--positive)'; e.currentTarget.style.background = 'color-mix(in oklab, var(--positive) 8%, transparent)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'transparent'; }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'color-mix(in oklab, var(--positive) 14%, transparent)',
+              display: 'grid', placeItems: 'center' }}>
+              <Ic.arrowDown size={28} style={{ color: 'var(--positive)' }}/>
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 17, color: 'var(--ink)', marginBottom: 4 }}>Entrada</div>
+              <div className="faint" style={{ fontSize: 12.5, textAlign: 'center' }}>Salário, freelance, rendimentos…</div>
+            </div>
+          </button>
+          {/* Saída */}
+          <button onClick={() => { setFluxo('saida'); setStep('saida_tipo'); }}
+            style={{ padding: '28px 16px', borderRadius: 18, border: '2px solid var(--line)',
+              background: 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column',
+              alignItems: 'center', gap: 12, transition: 'all 0.18s var(--ease)', fontFamily: 'var(--font-ui)' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--negative)'; e.currentTarget.style.background = 'color-mix(in oklab, var(--negative) 8%, transparent)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'transparent'; }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'color-mix(in oklab, var(--negative) 14%, transparent)',
+              display: 'grid', placeItems: 'center' }}>
+              <Ic.arrowUp size={28} style={{ color: 'var(--negative)' }}/>
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 17, color: 'var(--ink)', marginBottom: 4 }}>Saída</div>
+              <div className="faint" style={{ fontSize: 12.5, textAlign: 'center' }}>Compras, contas, despesas…</div>
+            </div>
+          </button>
+        </div>
+      </ModalShell>
+    );
+  }
+
+  // ── Step 2: tipo de saída (débito / crédito / parcelado) ─────────────────
+  if (step === 'saida_tipo') {
+    return (
+      <ModalShell title="Tipo de saída" onClose={onClose} onBack={() => setStep('fluxo')}>
         <p className="faint" style={{ fontSize: 13, margin: '0 0 18px', textAlign: 'center' }}>
-          Qual tipo de lançamento deseja registrar?
+          Como foi essa saída?
         </p>
         <div className="tipo-lancamento-grid">
-          {TIPO_OPTIONS.map(opt => (
+          {SAIDA_OPTIONS.map(opt => (
             <button key={opt.id} onClick={() => { setTipo(opt.id); setStep('form'); }}
-              style={{ padding: '16px 12px', borderRadius: 16, border: `2px solid ${tipo===opt.id ? opt.color : 'var(--line)'}`,
+              style={{ padding: '20px 12px', borderRadius: 16, border: `2px solid ${tipo===opt.id ? opt.color : 'var(--line)'}`,
                 background: tipo===opt.id ? `color-mix(in oklab, ${opt.color} 12%, transparent)` : 'transparent',
                 cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-                transition: 'all 0.18s var(--ease)' }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = opt.color}
-              onMouseLeave={e => { if (tipo!==opt.id) e.currentTarget.style.borderColor = 'var(--line)'; }}>
-              <span style={{ color: opt.color }}>{Ic[opt.icon]({ size: 26 })}</span>
+                transition: 'all 0.18s var(--ease)', fontFamily: 'var(--font-ui)' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = opt.color; e.currentTarget.style.background = `color-mix(in oklab, ${opt.color} 10%, transparent)`; }}
+              onMouseLeave={e => { if (tipo!==opt.id) { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'transparent'; } }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: `color-mix(in oklab, ${opt.color} 14%, transparent)`,
+                display: 'grid', placeItems: 'center' }}>
+                <span style={{ color: opt.color }}>{Ic[opt.icon]({ size: 22 })}</span>
+              </div>
               <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>{opt.label}</span>
               <span className="faint" style={{ fontSize: 11.5, textAlign: 'center' }}>{opt.sub}</span>
             </button>
@@ -383,17 +438,19 @@ function TransactionModal({ modal, onSave, onDelete, onClose, catStore, cardStor
     );
   }
 
-  // ── Step 2: fill form ─────────────────────────────────────────────────────
-  const tipoOpt = TIPO_OPTIONS.find(o => o.id === tipo);
+  // ── Step 3: fill form ─────────────────────────────────────────────────────
+  const tipoOpt = isReceita
+    ? { label: 'Entrada', icon: 'arrowDown', color: 'var(--positive)' }
+    : SAIDA_OPTIONS.find(o => o.id === tipo) || SAIDA_OPTIONS[0];
   return (
     <ModalShell
-      title={isEdit ? 'Editar lançamento' : `Novo lançamento · ${tipoOpt?.label}`}
+      title={isEdit ? 'Editar lançamento' : `Novo lançamento`}
       onClose={onClose}
-      onBack={!isEdit ? () => setStep('tipo') : undefined}
+      onBack={!isEdit ? () => setStep(isReceita ? 'fluxo' : 'saida_tipo') : undefined}
     >
       {/* Tipo badge */}
       {!isEdit && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 10,
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10,
           background: `color-mix(in oklab, ${tipoOpt?.color} 12%, transparent)`,
           marginBottom: 16, width: 'fit-content' }}>
           <span style={{ color: tipoOpt?.color }}>{Ic[tipoOpt?.icon]({ size: 16 })}</span>
