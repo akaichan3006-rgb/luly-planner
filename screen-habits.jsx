@@ -1,8 +1,17 @@
 // screen-habits.jsx
+const HABIT_WIDGETS = [
+  { id: 'stats',     label: 'Cards de sequência' },
+  { id: 'lista',     label: 'Hábitos de hoje' },
+  { id: 'calendario',label: 'Calendário de progresso' },
+  { id: 'semana',    label: 'Resumo da semana' },
+];
+
 function Habitos() {
   const store = useHabitStore();
   const habitos = store.getAll();
-  const [modal, setModal] = useS(null); // null | {mode:'new'|'edit', habit}
+  const [modal, setModal] = useS(null);
+  const [editing, setEditing] = useS(false);
+  const { visible, hidden, setVisible, moveUp, moveDown, reset } = useScreenLayout('habitos', HABIT_WIDGETS);
 
   const dias = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
   const concluidos = habitos.filter(h => (h.hoje||0) >= (h.meta||1)).length;
@@ -23,9 +32,26 @@ function Habitos() {
   };
   const del = () => { store.remove(modal.habit.id); setModal(null); };
 
+  const wrap = (id, content) => {
+    const idx = visible.findIndex(w => w.id === id);
+    return (
+      <ScreenWidget key={id} id={id} label={HABIT_WIDGETS.find(d => d.id === id)?.label}
+        editing={editing} isFirst={idx === 0} isLast={idx === visible.length - 1}
+        onHide={i => setVisible(i, false)} onMoveUp={moveUp} onMoveDown={moveDown}>
+        {content}
+      </ScreenWidget>
+    );
+  };
+
   return (
     <div className="screen">
       <PageHeader title="Controle de Hábitos" sub={habitos.length > 0 ? 'Pequenos passos, grandes sequências' : 'Crie hábitos e acompanhe sua consistência.'}>
+        {habitos.length > 0 && (
+          <button className="btn-ghost btn" onClick={() => setEditing(e => !e)}
+            style={editing ? { background: 'color-mix(in oklab, var(--primary) 14%, transparent)', borderColor: 'var(--primary)', color: 'var(--primary)' } : {}}>
+            <Ic.edit size={16}/>{editing ? 'Editando…' : 'Personalizar'}
+          </button>
+        )}
         <button className="btn" onClick={openNew}><Ic.plus size={16}/>Novo hábito</button>
       </PageHeader>
 
@@ -38,91 +64,88 @@ function Habitos() {
         </GlassCard>
       ) : (
         <React.Fragment>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
-            <StatCard icon="check" label="Concluídos hoje" value={`${concluidos} / ${habitos.length}`} color="#4f9d7e" />
-            <StatCard icon="flame" label="Sequência ativa" value={`${seqAtiva} dias`} color="var(--primary)" />
-            <StatCard icon="sparkle" label="Melhor sequência" value={`${melhorSeq} dias`} color="#d29a52" />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16 }}>
-            {/* habit list */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {habitos.map((h) => {
-                const done = (h.hoje||0) >= (h.meta||1);
-                const pct = Math.min(100, Math.round(((h.hoje||0) / (h.meta||1)) * 100));
-                return (
-                  <GlassCard key={h.id} style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <button onClick={() => store.markToday(h.id)} title="Marcar hoje" style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}>
-                      <Ring pct={pct} size={56} thickness={6} color={h.cor}>
-                        {done ? <Ic.check size={22} style={{ color: h.cor }}/> : (Ic[h.icon] ? Ic[h.icon]({ size: 20, style: { color: h.cor } }) : null)}
-                      </Ring>
-                    </button>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontWeight: 700, fontSize: 15.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.nome}</span>
-                        {(h.seq||0) > 0 && (
-                          <span className="chip" style={{ flexShrink: 0, color: 'var(--warn)', borderColor: 'transparent', background: 'rgba(210,154,82,0.13)' }}>
-                            <Ic.flame size={12}/>{h.seq} dias
-                          </span>
-                        )}
-                      </div>
-                      <div className="faint" style={{ fontSize: 12.5, marginTop: 3 }}>{h.hoje||0}/{h.meta} {h.unidade} · melhor {h.melhor||0} dias</div>
-                      <div style={{ display: 'flex', gap: 7, marginTop: 10 }}>
-                        {(h.semana||[0,0,0,0,0,0,0]).map((v, i) => (
-                          <div key={i} title={dias[i]} style={{ width: 26, height: 26, borderRadius: 8, display: 'grid', placeItems: 'center',
-                            fontSize: 10.5, fontWeight: 700,
-                            background: v ? h.cor : 'var(--chip-bg)', color: v ? '#fff' : 'var(--ink-faint)',
-                            border: `2px solid ${v ? 'transparent' : 'transparent'}` }}>
-                            {v ? <Ic.check size={13}/> : dias[i]}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <button className="icon-btn" style={{ width: 30, height: 30, flexShrink: 0 }} onClick={() => openEdit(h)} title="Editar"><Ic.edit size={14}/></button>
-                  </GlassCard>
-                );
-              })}
-            </div>
-
-            {/* right column */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <GlassCard style={{ padding: 22 }}>
-                <CardTitle icon="calMonth" title="Calendário de progresso" />
-                <div className="faint" style={{ fontSize: 12.5, marginTop: 4 }}>Dias com todos os hábitos concluídos</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, marginTop: 16 }}>
-                  {dias.map((d, i) => <div key={i} className="faint" style={{ textAlign: 'center', fontSize: 10.5, fontWeight: 700 }}>{d}</div>)}
-                  {calData.map((v, i) => (
-                    <div key={i} style={{ aspectRatio: '1', borderRadius: 8,
-                      background: v ? `color-mix(in oklab, var(--primary) ${40 + (i % 3) * 25}%, transparent)` : 'var(--chip-bg)' }}/>
-                  ))}
+          <ScreenEditBanner editing={editing} hidden={hidden} defs={HABIT_WIDGETS}
+            onToggle={(id, v) => setVisible(id, v)} onReset={reset} onDone={() => setEditing(false)} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {visible.map(w => {
+              if (w.id === 'stats') return wrap('stats',
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                  <StatCard icon="check"   label="Concluídos hoje"  value={`${concluidos} / ${habitos.length}`} color="#4f9d7e" />
+                  <StatCard icon="flame"   label="Sequência ativa"  value={`${seqAtiva} dias`}                  color="var(--primary)" />
+                  <StatCard icon="sparkle" label="Melhor sequência" value={`${melhorSeq} dias`}                 color="#d29a52" />
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
-                  <span className="faint" style={{ fontSize: 11 }}>menos</span>
-                  {[0.2, 0.45, 0.7, 1].map((o, i) => <span key={i} style={{ width: 13, height: 13, borderRadius: 4, background: `color-mix(in oklab, var(--primary) ${o*100}%, transparent)` }}/>)}
-                  <span className="faint" style={{ fontSize: 11 }}>mais</span>
-                </div>
-              </GlassCard>
-
-              <GlassCard style={{ padding: 22 }}>
-                <CardTitle icon="sparkle" title="Resumo da semana" />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-                  {habitos.slice(0, 4).map(h => {
-                    const semanaPct = Math.round(((h.semana||[]).filter(Boolean).length / 7) * 100);
+              );
+              if (w.id === 'lista') return wrap('lista',
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {habitos.map((h) => {
+                    const done = (h.hoje||0) >= (h.meta||1);
+                    const pct = Math.min(100, Math.round(((h.hoje||0) / (h.meta||1)) * 100));
                     return (
-                      <div key={h.id}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5 }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
-                            <span style={{ color: h.cor }}>{Ic[h.icon] ? Ic[h.icon]({ size: 15 }) : null}</span>{h.nome}
-                          </span>
-                          <span className="faint" style={{ fontWeight: 600 }}>{semanaPct}%</span>
+                      <GlassCard key={h.id} style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <button onClick={() => store.markToday(h.id)} title="Marcar hoje" style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}>
+                          <Ring pct={pct} size={56} thickness={6} color={h.cor}>
+                            {done ? <Ic.check size={22} style={{ color: h.cor }}/> : (Ic[h.icon] ? Ic[h.icon]({ size: 20, style: { color: h.cor } }) : null)}
+                          </Ring>
+                        </button>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontWeight: 700, fontSize: 15.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.nome}</span>
+                            {(h.seq||0) > 0 && <span className="chip" style={{ flexShrink: 0, color: 'var(--warn)', borderColor: 'transparent', background: 'rgba(210,154,82,0.13)' }}><Ic.flame size={12}/>{h.seq} dias</span>}
+                          </div>
+                          <div className="faint" style={{ fontSize: 12.5, marginTop: 3 }}>{h.hoje||0}/{h.meta} {h.unidade} · melhor {h.melhor||0} dias</div>
+                          <div style={{ display: 'flex', gap: 7, marginTop: 10 }}>
+                            {(h.semana||[0,0,0,0,0,0,0]).map((v, i) => (
+                              <div key={i} title={dias[i]} style={{ width: 26, height: 26, borderRadius: 8, display: 'grid', placeItems: 'center', fontSize: 10.5, fontWeight: 700,
+                                background: v ? h.cor : 'var(--chip-bg)', color: v ? '#fff' : 'var(--ink-faint)' }}>
+                                {v ? <Ic.check size={13}/> : dias[i]}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <Bar pct={semanaPct} color={h.cor} />
-                      </div>
+                        <button className="icon-btn" style={{ width: 30, height: 30, flexShrink: 0 }} onClick={() => openEdit(h)}><Ic.edit size={14}/></button>
+                      </GlassCard>
                     );
                   })}
                 </div>
-              </GlassCard>
-            </div>
+              );
+              if (w.id === 'calendario') return wrap('calendario',
+                <GlassCard style={{ padding: 22 }}>
+                  <CardTitle icon="calMonth" title="Calendário de progresso" />
+                  <div className="faint" style={{ fontSize: 12.5, marginTop: 4 }}>Dias com todos os hábitos concluídos</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, marginTop: 16 }}>
+                    {dias.map((d, i) => <div key={i} className="faint" style={{ textAlign: 'center', fontSize: 10.5, fontWeight: 700 }}>{d}</div>)}
+                    {calData.map((v, i) => <div key={i} style={{ aspectRatio: '1', borderRadius: 8, background: v ? `color-mix(in oklab, var(--primary) ${40+(i%3)*25}%, transparent)` : 'var(--chip-bg)' }}/>)}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+                    <span className="faint" style={{ fontSize: 11 }}>menos</span>
+                    {[0.2,0.45,0.7,1].map((o, i) => <span key={i} style={{ width: 13, height: 13, borderRadius: 4, background: `color-mix(in oklab, var(--primary) ${o*100}%, transparent)` }}/>)}
+                    <span className="faint" style={{ fontSize: 11 }}>mais</span>
+                  </div>
+                </GlassCard>
+              );
+              if (w.id === 'semana') return wrap('semana',
+                <GlassCard style={{ padding: 22 }}>
+                  <CardTitle icon="sparkle" title="Resumo da semana" />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+                    {habitos.slice(0, 4).map(h => {
+                      const semanaPct = Math.round(((h.semana||[]).filter(Boolean).length / 7) * 100);
+                      return (
+                        <div key={h.id}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5 }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+                              <span style={{ color: h.cor }}>{Ic[h.icon] ? Ic[h.icon]({ size: 15 }) : null}</span>{h.nome}
+                            </span>
+                            <span className="faint" style={{ fontWeight: 600 }}>{semanaPct}%</span>
+                          </div>
+                          <Bar pct={semanaPct} color={h.cor} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </GlassCard>
+              );
+              return null;
+            })}
           </div>
         </React.Fragment>
       )}

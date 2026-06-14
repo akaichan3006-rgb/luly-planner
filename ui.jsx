@@ -152,8 +152,144 @@ function StatCard({ icon, label, value, delta, deltaUp, color = 'var(--primary)'
   );
 }
 
+// ── Generic screen widget wrapper ─────────────────────────────────────────────
+function ScreenWidget({ id, label, editing, isFirst, isLast, onHide, onMoveUp, onMoveDown, children }) {
+  if (!editing) return <div style={{ marginBottom: 0 }}>{children}</div>;
+  return (
+    <div style={{ position: 'relative' }}>
+      {/* Top control bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, padding: '5px 10px',
+        borderRadius: 11, background: 'color-mix(in oklab, var(--primary) 10%, var(--bg-1))',
+        border: '1px dashed color-mix(in oklab, var(--primary) 35%, transparent)' }}>
+        {/* Drag dots */}
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="color-mix(in oklab, var(--ink) 30%, transparent)">
+          <circle cx="5" cy="4" r="1.5"/><circle cx="11" cy="4" r="1.5"/>
+          <circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/>
+          <circle cx="5" cy="12" r="1.5"/><circle cx="11" cy="12" r="1.5"/>
+        </svg>
+        <span style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--primary)', flex: 1 }}>{label}</span>
+        <button disabled={isFirst} onClick={() => onMoveUp(id)}
+          style={{ border: 'none', background: 'none', cursor: isFirst ? 'default' : 'pointer', opacity: isFirst ? 0.3 : 1,
+            padding: '2px 5px', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center' }}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <polyline points="3,10 8,5 13,10"/>
+          </svg>
+        </button>
+        <button disabled={isLast} onClick={() => onMoveDown(id)}
+          style={{ border: 'none', background: 'none', cursor: isLast ? 'default' : 'pointer', opacity: isLast ? 0.3 : 1,
+            padding: '2px 5px', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center' }}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <polyline points="3,6 8,11 13,6"/>
+          </svg>
+        </button>
+        <div style={{ width: 1, height: 14, background: 'var(--line)' }}/>
+        <button onClick={() => { onHide(id); window.showToast && window.showToast('Seção ocultada. Reative em "Personalizar".', 'info'); }}
+          style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '2px 6px', color: 'var(--negative)',
+            fontSize: 11.5, fontWeight: 700, fontFamily: 'var(--font-ui)', display: 'flex', alignItems: 'center', gap: 3 }}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <path d="M2 2l12 12"/><path d="M6.5 3.5A6 6 0 0 1 8 3c4 0 6 5 6 5s-.8 1.5-2.2 2.8"/>
+            <path d="M9.5 12.5A6 6 0 0 1 8 13c-4 0-6-5-6-5s.8-1.5 2.2-2.8"/>
+          </svg>Ocultar
+        </button>
+      </div>
+      <div style={{ outline: '1.5px dashed color-mix(in oklab, var(--primary) 28%, transparent)', outlineOffset: 4,
+        borderRadius: 'calc(var(--glass-radius) + 5px)', pointerEvents: 'none', position: 'absolute', inset: '30px 0 0 0' }}/>
+      {children}
+    </div>
+  );
+}
+
+// ── Edit mode banner + manager panel ─────────────────────────────────────────
+function ScreenEditBanner({ editing, hidden, defs, onToggle, onReset, onDone }) {
+  const [showPanel, setShowPanel] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  if (!editing) return null;
+  return (
+    <React.Fragment>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderRadius: 14, marginBottom: 14,
+        background: 'color-mix(in oklab, var(--primary) 10%, transparent)',
+        border: '1px dashed color-mix(in oklab, var(--primary) 40%, transparent)' }}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round">
+          <path d="M11 2l3 3-8 8H3v-3l8-8z"/>
+        </svg>
+        <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--primary)' }}>Modo de edição</span>
+        <span className="faint" style={{ fontSize: 12.5 }}>Use ↑ ↓ para reordenar · clique em Ocultar para esconder seções</span>
+        <span style={{ flex: 1 }}/>
+        {hidden.length > 0 && (
+          <button onClick={() => setShowPanel(true)} style={{ border: '1px solid var(--line)', background: 'var(--bg-1)', borderRadius: 10,
+            padding: '5px 12px', cursor: 'pointer', fontSize: 12.5, fontFamily: 'var(--font-ui)', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', gap: 5 }}>
+            {hidden.length} ocult{hidden.length === 1 ? 'a' : 'as'}
+          </button>
+        )}
+        <button onClick={onDone} style={{ border: 'none', background: 'var(--primary)', color: '#fff', borderRadius: 10,
+          padding: '6px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-ui)', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="2,8 6,12 14,4"/></svg>
+          Concluir
+        </button>
+      </div>
+
+      {/* Hidden sections hint */}
+      {hidden.length > 0 && !showPanel && (
+        <div onClick={() => setShowPanel(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 14,
+          marginBottom: 14, background: 'var(--chip-bg)', border: '1.5px dashed var(--line)', cursor: 'pointer' }}>
+          <span style={{ fontSize: 18 }}>👁</span>
+          <div>
+            <span style={{ fontWeight: 700, fontSize: 13.5 }}>{hidden.length} seção{hidden.length > 1 ? 'ões' : ''} oculta{hidden.length > 1 ? 's' : ''}: </span>
+            <span className="faint" style={{ fontSize: 12.5 }}>{hidden.map(w => defs.find(d => d.id === w.id)?.label).join(' · ')}</span>
+          </div>
+          <span style={{ marginLeft: 'auto', fontSize: 12.5, fontWeight: 600, color: 'var(--primary)' }}>Gerenciar →</span>
+        </div>
+      )}
+
+      {/* Manager panel */}
+      {showPanel && (
+        <div onClick={() => setShowPanel(false)} style={{ position: 'fixed', inset: 0, zIndex: 55, background: 'rgba(40,20,30,0.35)', backdropFilter: 'blur(6px)', display: 'grid', placeItems: 'center', padding: 20 }}>
+          <GlassCard onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, padding: 24, maxHeight: '80vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+              <h3 className="serif" style={{ margin: 0, fontSize: 20 }}>Seções</h3>
+              <button onClick={() => setShowPanel(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--ink-faint)', lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {defs.map(def => {
+                const w = hidden.find(h => h.id === def.id) || { id: def.id, visible: true };
+                const isHidden = hidden.some(h => h.id === def.id);
+                return (
+                  <div key={def.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+                    borderRadius: 12, background: 'var(--chip-bg)', border: '1px solid var(--line)' }}>
+                    <span style={{ flex: 1, fontWeight: 600, fontSize: 13.5, color: isHidden ? 'var(--ink-faint)' : 'var(--ink)' }}>{def.label}</span>
+                    <button onClick={() => onToggle(def.id, isHidden)}
+                      style={{ width: 44, height: 26, borderRadius: 99, border: 'none', cursor: 'pointer', padding: 3,
+                        background: !isHidden ? 'var(--primary)' : 'color-mix(in oklab, var(--ink) 18%, transparent)', transition: 'background 0.2s' }}>
+                      <span style={{ display: 'block', width: 20, height: 20, borderRadius: '50%', background: '#fff',
+                        transform: !isHidden ? 'translateX(18px)' : 'translateX(0)', transition: 'transform 0.2s var(--ease)', boxShadow: '0 2px 5px rgba(0,0,0,0.25)' }}/>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+              {!confirmReset ? (
+                <button onClick={() => setConfirmReset(true)} style={{ width: '100%', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--negative)', fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 13, padding: '8px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  Restaurar padrão
+                </button>
+              ) : (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span className="faint" style={{ flex: 1, fontSize: 12 }}>Restaurar a ordem e visibilidade padrão?</span>
+                  <button onClick={() => setConfirmReset(false)} style={{ border: '1px solid var(--line)', background: 'var(--bg-1)', borderRadius: 9, padding: '5px 12px', cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: 12 }}>Não</button>
+                  <button onClick={() => { onReset(); setConfirmReset(false); setShowPanel(false); window.showToast && window.showToast('Layout restaurado!'); }}
+                    style={{ border: 'none', background: 'var(--negative)', color: '#fff', borderRadius: 9, padding: '5px 12px', cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 700 }}>Restaurar</button>
+                </div>
+              )}
+            </div>
+          </GlassCard>
+        </div>
+      )}
+    </React.Fragment>
+  );
+}
+
 // shared hook aliases for sibling babel scripts (each has its own scope)
 window.useS = React.useState;
 window.useE = React.useEffect;
 
-Object.assign(window, { GlassCard, Donut, Ring, EvolutionChart, Spark, PageHeader, StatCard });
+Object.assign(window, { GlassCard, Donut, Ring, EvolutionChart, Spark, PageHeader, StatCard, ScreenWidget, ScreenEditBanner });

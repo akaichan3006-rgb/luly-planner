@@ -1,4 +1,11 @@
 // screen-finance.jsx — Financeiro com categorias customizadas, cartões e parcelamento
+const FINANCE_WIDGETS = [
+  { id: 'investimentos', label: 'Atalho Investimentos' },
+  { id: 'stats',         label: 'Cards de saldo' },
+  { id: 'evolucao',      label: 'Evolução + Gastos por categoria' },
+  { id: 'ranking',       label: 'Ranking + Histórico' },
+  { id: 'cartoes',       label: 'Cartões e parcelas' },
+];
 
 function InvBanner({ go }) {
   const inv = useInvestmentStore();
@@ -52,7 +59,9 @@ function Financeiro({ go }) {
   const cardStore = useCardStore();
   const [modal, setModal] = useS(null);
   const [catModal, setCatModal] = useS(false);
-  const [cardModal, setCardModal] = useS(null); // null | {mode:'new'|'edit', card}
+  const [cardModal, setCardModal] = useS(null);
+  const [editing, setEditing] = useS(false);
+  const { visible, hidden, setVisible, moveUp, moveDown, reset } = useScreenLayout('financeiro', FINANCE_WIDGETS);
 
   const receitas   = store.getReceitas();
   const despesas   = store.getDespesas();
@@ -91,173 +100,196 @@ function Financeiro({ go }) {
     <div className="screen">
       <PageHeader title="Controle Financeiro" sub="Acompanhe entradas, saídas e para onde seu dinheiro vai.">
         <button className="btn-ghost btn" onClick={() => setCardModal({ mode: 'list' })}><Ic.wallet size={16}/>Cartões</button>
-        <button className="btn-ghost btn" onClick={() => go('investimentos')} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <Ic.arrowUp size={16}/>Investimentos
+        <button className="btn-ghost btn" onClick={() => go('investimentos')}><Ic.arrowUp size={16}/>Investimentos</button>
+        <button className="btn-ghost btn" onClick={() => setEditing(e => !e)}
+          style={editing ? { background: 'color-mix(in oklab, var(--primary) 14%, transparent)', borderColor: 'var(--primary)', color: 'var(--primary)' } : {}}>
+          <Ic.edit size={16}/>{editing ? 'Editando…' : 'Personalizar'}
         </button>
         <button className="btn" onClick={openNew}><Ic.plus size={16}/>Novo lançamento</button>
       </PageHeader>
 
-      {/* Atalho investimentos */}
-      <InvBanner go={go} />
+      <ScreenEditBanner editing={editing} hidden={hidden} defs={FINANCE_WIDGETS}
+        onToggle={(id, v) => setVisible(id, v)} onReset={reset} onDone={() => setEditing(false)} />
 
-      {/* Stat cards */}
-      <div className="stat-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 16 }}>
-        <StatCard icon="wallet"   label="Saldo atual"     value={brl(store.getSaldo())}       color="var(--primary)" />
-        <StatCard icon="arrowDown" label="Entradas do mês" value={brl(store.getEntradasMes())} color="var(--positive)" />
-        <StatCard icon="arrowUp"  label="Saídas do mês"   value={brl(store.getSaidasMes())}   color="var(--negative)" />
-        <StatCard icon="leaf"     label="Economia do mês" value={brl(store.getEconomiaMes())} color="var(--accent)" />
-      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {visible.map((w, idx) => {
+        const isFirst = idx === 0, isLast = idx === visible.length - 1;
+        const wrap = (content) => (
+          <ScreenWidget key={w.id} id={w.id} label={FINANCE_WIDGETS.find(d => d.id === w.id)?.label}
+            editing={editing} isFirst={isFirst} isLast={isLast}
+            onHide={id => setVisible(id, false)} onMoveUp={moveUp} onMoveDown={moveDown}>
+            {content}
+          </ScreenWidget>
+        );
 
-      {/* Row 1: evolução + donut */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.45fr 1fr', gap: 16, marginBottom: 16 }}>
-        <GlassCard style={{ padding: 22 }}>
-          <CardTitle icon="arrowUp" title="Evolução financeira" />
-          <div style={{ display: 'flex', gap: 18, margin: '12px 0 4px' }}>
-            <Legend color="var(--primary)" label="Entradas" />
-            <Legend color="var(--accent)"  label="Saídas" />
+        if (w.id === 'investimentos') return wrap(<InvBanner key="inv" go={go} />);
+
+        if (w.id === 'stats') return wrap(
+          <div className="stat-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
+            <StatCard icon="wallet"    label="Saldo atual"     value={brl(store.getSaldo())}       color="var(--primary)" />
+            <StatCard icon="arrowDown" label="Entradas do mês" value={brl(store.getEntradasMes())} color="var(--positive)" />
+            <StatCard icon="arrowUp"   label="Saídas do mês"   value={brl(store.getSaidasMes())}   color="var(--negative)" />
+            <StatCard icon="leaf"      label="Economia do mês" value={brl(store.getEconomiaMes())} color="var(--accent)" />
           </div>
-          <EvolutionChart data={evolucao} />
-        </GlassCard>
+        );
 
-        <GlassCard style={{ padding: 22 }}>
-          <CardTitle icon="filter" title="Gastos por categoria" />
-          {categorias.length === 0 ? (
-            <div className="faint" style={{ textAlign: 'center', padding: '40px 0', fontSize: 13 }}>Adicione despesas para ver a distribuição.</div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 12 }}>
-              <Donut data={categorias} centerLabel={brl(store.getSaidasMes())} centerSub="TOTAL GASTO" />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 168, overflowY: 'auto' }}>
-                {categorias.slice(0,6).map(c => (
-                  <div key={c.nome} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
-                    <span style={{ width: 10, height: 10, borderRadius: 3, background: c.cor, flexShrink: 0 }}/>
-                    <span style={{ flex: 1, fontWeight: 600 }}>{c.nome}</span>
-                    <span className="faint" style={{ fontWeight: 600 }}>{brl(c.valor)}</span>
-                  </div>
-                ))}
+        if (w.id === 'evolucao') return wrap(
+          <div style={{ display: 'grid', gridTemplateColumns: '1.45fr 1fr', gap: 16 }}>
+            <GlassCard style={{ padding: 22 }}>
+              <CardTitle icon="arrowUp" title="Evolução financeira" />
+              <div style={{ display: 'flex', gap: 18, margin: '12px 0 4px' }}>
+                <Legend color="var(--primary)" label="Entradas" />
+                <Legend color="var(--accent)"  label="Saídas" />
               </div>
-            </div>
-          )}
-        </GlassCard>
-      </div>
-
-      {/* Row 2: ranking + histórico */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.45fr', gap: 16, marginBottom: 16 }}>
-        <GlassCard style={{ padding: 22 }}>
-          <CardTitle icon="grid" title="Ranking de categorias" />
-          {categorias.length === 0 ? (
-            <div className="faint" style={{ textAlign: 'center', padding: '40px 0', fontSize: 13 }}>Sem categorias ainda.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 16 }}>
-              {categorias.slice(0,7).map(c => (
-                <div key={c.nome}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
-                      <span style={{ color: c.cor }}>{Ic[c.icon] ? Ic[c.icon]({ size: 15 }) : null}</span>{c.nome}
-                    </span>
-                    <span className="faint" style={{ fontWeight: 600 }}>{brl(c.valor)}</span>
+              <EvolutionChart data={evolucao} />
+            </GlassCard>
+            <GlassCard style={{ padding: 22 }}>
+              <CardTitle icon="filter" title="Gastos por categoria" />
+              {categorias.length === 0 ? (
+                <div className="faint" style={{ textAlign: 'center', padding: '40px 0', fontSize: 13 }}>Adicione despesas para ver a distribuição.</div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 12 }}>
+                  <Donut data={categorias} centerLabel={brl(store.getSaidasMes())} centerSub="TOTAL GASTO" />
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 168, overflowY: 'auto' }}>
+                    {categorias.slice(0,6).map(c => (
+                      <div key={c.nome} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: 3, background: c.cor, flexShrink: 0 }}/>
+                        <span style={{ flex: 1, fontWeight: 600 }}>{c.nome}</span>
+                        <span className="faint" style={{ fontWeight: 600 }}>{brl(c.valor)}</span>
+                      </div>
+                    ))}
                   </div>
-                  <Bar pct={(c.valor/maxCat)*100} color={c.cor} />
                 </div>
-              ))}
-            </div>
-          )}
-        </GlassCard>
+              )}
+            </GlassCard>
+          </div>
+        );
 
-        <GlassCard style={{ padding: 22 }}>
-          <CardTitle icon="receipt" title="Histórico financeiro" />
-          {lancamentos.length === 0 ? (
-            <div className="faint" style={{ textAlign: 'center', padding: '40px 0', fontSize: 13 }}>
-              Sem lançamentos ainda.<br/>Clique em "Novo lançamento" para começar.
+        if (w.id === 'ranking') return wrap(
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.45fr', gap: 16 }}>
+            <GlassCard style={{ padding: 22 }}>
+              <CardTitle icon="grid" title="Ranking de categorias" />
+              {categorias.length === 0 ? (
+                <div className="faint" style={{ textAlign: 'center', padding: '40px 0', fontSize: 13 }}>Sem categorias ainda.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 16 }}>
+                  {categorias.slice(0,7).map(c => (
+                    <div key={c.nome}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+                          <span style={{ color: c.cor }}>{Ic[c.icon] ? Ic[c.icon]({ size: 15 }) : null}</span>{c.nome}
+                        </span>
+                        <span className="faint" style={{ fontWeight: 600 }}>{brl(c.valor)}</span>
+                      </div>
+                      <Bar pct={(c.valor/maxCat)*100} color={c.cor} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </GlassCard>
+            <GlassCard style={{ padding: 22 }}>
+              <CardTitle icon="receipt" title="Histórico financeiro" />
+              {lancamentos.length === 0 ? (
+                <div className="faint" style={{ textAlign: 'center', padding: '40px 0', fontSize: 13 }}>
+                  Sem lançamentos ainda.<br/>Clique em "Novo lançamento" para começar.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', marginTop: 12 }}>
+                  {lancamentos.slice(0,12).map((l, i) => {
+                    const card = l.card_id ? cardStore.getById(l.card_id) : null;
+                    return (
+                      <div key={l.id} onClick={() => openEdit(l)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '11px 4px',
+                          borderBottom: i < Math.min(11, lancamentos.length-1) ? '1px solid var(--line)' : 'none',
+                          cursor: 'pointer', transition: 'opacity 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.opacity = '0.72'}
+                        onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
+                        <div style={{ width: 38, height: 38, borderRadius: 11, display: 'grid', placeItems: 'center', flexShrink: 0,
+                          background: l._dir === 'in' ? 'rgba(79,157,126,0.13)' : 'var(--chip-bg)',
+                          color: l._dir === 'in' ? 'var(--positive)' : 'var(--ink-soft)' }}>
+                          {Ic[l.icon || (l._dir==='in'?'arrowDown':'receipt')] ? Ic[l.icon||(l._dir==='in'?'arrowDown':'receipt')]({ size: 18 }) : <Ic.receipt size={18}/>}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.desc}</div>
+                          <div className="faint" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            {l.cat}
+                            {l.installment_group_id && <span className="chip" style={{ padding: '1px 7px', fontSize: 10.5 }}>{l.installment_number}/{l.total_installments}x</span>}
+                            {l.recorrente && <span className="chip" style={{ padding: '1px 7px', fontSize: 10.5 }}><Ic.clock size={10}/>fixo</span>}
+                            {card && <span className="chip" style={{ padding: '1px 7px', fontSize: 10.5, color: card.color }}>{card.name}</span>}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: l._dir === 'in' ? 'var(--positive)' : 'var(--ink)' }}>
+                            {l._dir === 'in' ? '+' : '–'}{brl(l.valor)}
+                          </div>
+                          <div className="faint" style={{ fontSize: 11.5 }}>dia {String(l.dia||'—').padStart(2,'0')}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </GlassCard>
+          </div>
+        );
+
+        if (w.id === 'cartoes') return wrap(
+          (gastosPorCartao.length > 0 || parcelasFuturas.length > 0) ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              {gastosPorCartao.length > 0 && (
+                <GlassCard style={{ padding: 22 }}>
+                  <CardTitle icon="wallet" title="Gastos por cartão" />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 16 }}>
+                    {gastosPorCartao.map(c => (
+                      <div key={c.card_id}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+                            <span style={{ width: 10, height: 10, borderRadius: 3, background: c.cor }}/>
+                            {c.nome}
+                          </span>
+                          <span className="faint" style={{ fontWeight: 600 }}>{brl(c.valor)}</span>
+                        </div>
+                        <Bar pct={(c.valor/maxCartao)*100} color={c.cor} />
+                      </div>
+                    ))}
+                  </div>
+                </GlassCard>
+              )}
+              {parcelasFuturas.length > 0 && (
+                <GlassCard style={{ padding: 22 }}>
+                  <CardTitle icon="clock" title="Parcelas futuras" />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
+                    {parcelasFuturas.slice(0,6).map(g => {
+                      const pct = Math.round((g.installment_number / g.total_installments) * 100);
+                      const card = g.card_id ? cardStore.getById(g.card_id) : null;
+                      return (
+                        <div key={g.id} style={{ padding: '10px 12px', borderRadius: 12, background: 'var(--chip-bg)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <div style={{ fontWeight: 600, fontSize: 13.5 }}>{g.desc}</div>
+                            <span className="chip" style={{ fontSize: 11 }}>{g.installment_number}/{g.total_installments}x</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+                            <span className="faint" style={{ fontSize: 11.5 }}>{brl(g.valor_parcela)}/mês · {g.restantes} restante{g.restantes!==1?'s':''}</span>
+                            {card && <span className="faint" style={{ fontSize: 11, color: card.color }}>{card.name}</span>}
+                          </div>
+                          <Bar pct={pct} color="var(--primary)" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </GlassCard>
+              )}
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', marginTop: 12 }}>
-              {lancamentos.slice(0,12).map((l, i) => {
-                const cor = l._dir === 'in' ? 'var(--positive)' : 'var(--ink)';
-                const card = l.card_id ? cardStore.getById(l.card_id) : null;
-                return (
-                  <div key={l.id} onClick={() => openEdit(l)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '11px 4px',
-                      borderBottom: i < Math.min(11, lancamentos.length-1) ? '1px solid var(--line)' : 'none',
-                      cursor: 'pointer', transition: 'opacity 0.15s' }}
-                    onMouseEnter={e => e.currentTarget.style.opacity = '0.72'}
-                    onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-                    <div style={{ width: 38, height: 38, borderRadius: 11, display: 'grid', placeItems: 'center', flexShrink: 0,
-                      background: l._dir === 'in' ? 'rgba(79,157,126,0.13)' : 'var(--chip-bg)',
-                      color: l._dir === 'in' ? 'var(--positive)' : 'var(--ink-soft)' }}>
-                      {Ic[l.icon || (l._dir==='in'?'arrowDown':'receipt')] ? Ic[l.icon||(l._dir==='in'?'arrowDown':'receipt')]({ size: 18 }) : <Ic.receipt size={18}/>}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.desc}</div>
-                      <div className="faint" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        {l.cat}
-                        {l.installment_group_id && <span className="chip" style={{ padding: '1px 7px', fontSize: 10.5 }}>{l.installment_number}/{l.total_installments}x</span>}
-                        {l.recorrente && <span className="chip" style={{ padding: '1px 7px', fontSize: 10.5 }}><Ic.clock size={10}/>fixo</span>}
-                        {card && <span className="chip" style={{ padding: '1px 7px', fontSize: 10.5, color: card.color }}>{card.name}</span>}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: l._dir === 'in' ? 'var(--positive)' : 'var(--ink)' }}>
-                        {l._dir === 'in' ? '+' : '–'}{brl(l.valor)}
-                      </div>
-                      <div className="faint" style={{ fontSize: 11.5 }}>dia {String(l.dia||'—').padStart(2,'0')}</div>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="faint" style={{ textAlign: 'center', padding: '24px 0', fontSize: 13 }}>
+              Sem dados de cartões ou parcelas ainda.
             </div>
-          )}
-        </GlassCard>
+          )
+        );
+
+        return null;
+      })}
       </div>
-
-      {/* Row 3: gastos por cartão + parcelas futuras */}
-      {(gastosPorCartao.length > 0 || parcelasFuturas.length > 0) && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-          {gastosPorCartao.length > 0 && (
-            <GlassCard style={{ padding: 22 }}>
-              <CardTitle icon="wallet" title="Gastos por cartão" />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 16 }}>
-                {gastosPorCartao.map(c => (
-                  <div key={c.card_id}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5 }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
-                        <span style={{ width: 10, height: 10, borderRadius: 3, background: c.cor }}/>
-                        {c.nome}
-                      </span>
-                      <span className="faint" style={{ fontWeight: 600 }}>{brl(c.valor)}</span>
-                    </div>
-                    <Bar pct={(c.valor/maxCartao)*100} color={c.cor} />
-                  </div>
-                ))}
-              </div>
-            </GlassCard>
-          )}
-
-          {parcelasFuturas.length > 0 && (
-            <GlassCard style={{ padding: 22 }}>
-              <CardTitle icon="clock" title="Parcelas futuras" />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
-                {parcelasFuturas.slice(0,6).map(g => {
-                  const pct = Math.round((g.installment_number / g.total_installments) * 100);
-                  const card = g.card_id ? cardStore.getById(g.card_id) : null;
-                  return (
-                    <div key={g.id} style={{ padding: '10px 12px', borderRadius: 12, background: 'var(--chip-bg)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13.5 }}>{g.desc}</div>
-                        <span className="chip" style={{ fontSize: 11 }}>{g.installment_number}/{g.total_installments}x</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
-                        <span className="faint" style={{ fontSize: 11.5 }}>{brl(g.valor_parcela)}/mês · {g.restantes} restante{g.restantes!==1?'s':''}</span>
-                        {card && <span className="faint" style={{ fontSize: 11, color: card.color }}>{card.name}</span>}
-                      </div>
-                      <Bar pct={pct} color="var(--primary)" />
-                    </div>
-                  );
-                })}
-              </div>
-            </GlassCard>
-          )}
-        </div>
-      )}
 
       {/* Modals */}
       {modal && (

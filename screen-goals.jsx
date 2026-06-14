@@ -1,9 +1,16 @@
 // screen-goals.jsx
+const GOAL_WIDGETS = [
+  { id: 'resumo', label: 'Resumo geral + destaques' },
+  { id: 'lista',  label: 'Lista de metas' },
+];
+
 function Metas() {
   const store = useGoalStore();
   const metas = store.getAll();
-  const [modal, setModal] = useS(null); // null | {mode:'new'|'edit', meta}
-  const [addValModal, setAddValModal] = useS(null); // null | meta
+  const [modal, setModal] = useS(null);
+  const [addValModal, setAddValModal] = useS(null);
+  const [editing, setEditing] = useS(false);
+  const { visible, hidden, setVisible, moveUp, moveDown, reset } = useScreenLayout('metas', GOAL_WIDGETS);
 
   const totalAlvo = metas.reduce((s, m) => s + (m.alvo||0), 0);
   const totalAtual = metas.reduce((s, m) => s + (m.atual||0), 0);
@@ -18,10 +25,26 @@ function Metas() {
   };
   const del = () => { store.remove(modal.meta.id); setModal(null); };
 
+  const wrap = (id, content) => {
+    const idx = visible.findIndex(w => w.id === id);
+    return (
+      <ScreenWidget key={id} id={id} label={GOAL_WIDGETS.find(d => d.id === id)?.label}
+        editing={editing} isFirst={idx === 0} isLast={idx === visible.length - 1}
+        onHide={i => setVisible(i, false)} onMoveUp={moveUp} onMoveDown={moveDown}>
+        {content}
+      </ScreenWidget>
+    );
+  };
+
   return (
     <div className="screen">
       <PageHeader title="Metas e Objetivos" sub={metas.length > 0 ? `${metas.length} meta${metas.length === 1 ? '' : 's'} · continue no caminho certo 🌸` : 'Defina suas metas e acompanhe o progresso.'}>
-        <button className="btn-ghost btn"><Ic.filter size={16}/>Ordenar</button>
+        {metas.length > 0 && (
+          <button className="btn-ghost btn" onClick={() => setEditing(e => !e)}
+            style={editing ? { background: 'color-mix(in oklab, var(--primary) 14%, transparent)', borderColor: 'var(--primary)', color: 'var(--primary)' } : {}}>
+            <Ic.edit size={16}/>{editing ? 'Editando…' : 'Personalizar'}
+          </button>
+        )}
         <button className="btn" onClick={openNew}><Ic.plus size={16}/>Nova meta</button>
       </PageHeader>
 
@@ -34,30 +57,43 @@ function Metas() {
         </GlassCard>
       ) : (
         <React.Fragment>
-          <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16, marginBottom: 16 }}>
-            <GlassCard style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
-              <Ring pct={pctGeral} size={150} thickness={13} color="var(--primary)">
-                <div style={{ textAlign: 'center' }}>
-                  <div className="serif" style={{ fontSize: 40, lineHeight: 1 }}>{pctGeral}%</div>
-                  <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>PROGRESSO GERAL</div>
+          <ScreenEditBanner editing={editing} hidden={hidden} defs={GOAL_WIDGETS}
+            onToggle={(id, v) => setVisible(id, v)} onReset={reset} onDone={() => setEditing(false)} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {visible.map(w => {
+              if (w.id === 'resumo') return wrap('resumo',
+                <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16 }}>
+                  <GlassCard style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+                    <Ring pct={pctGeral} size={150} thickness={13} color="var(--primary)">
+                      <div style={{ textAlign: 'center' }}>
+                        <div className="serif" style={{ fontSize: 40, lineHeight: 1 }}>{pctGeral}%</div>
+                        <div className="faint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>PROGRESSO GERAL</div>
+                      </div>
+                    </Ring>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontWeight: 700, fontSize: 17 }}>{brl(totalAtual)}</div>
+                      <div className="faint" style={{ fontSize: 13 }}>de {brl(totalAlvo)} em objetivos</div>
+                    </div>
+                  </GlassCard>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                    {metas.slice(0, 2).map((m) => <MetaCard key={m.id} m={m} big onEdit={() => openEdit(m)} onAddValue={() => setAddValModal(m)} />)}
+                  </div>
                 </div>
-              </Ring>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontWeight: 700, fontSize: 17 }}>{brl(totalAtual)}</div>
-                <div className="faint" style={{ fontSize: 13 }}>de {brl(totalAlvo)} em objetivos</div>
-              </div>
-            </GlassCard>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              {metas.slice(0, 2).map((m) => <MetaCard key={m.id} m={m} big onEdit={() => openEdit(m)} onAddValue={() => setAddValModal(m)} />)}
-            </div>
+              );
+              if (w.id === 'lista') return wrap('lista',
+                metas.length > 2 ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+                    {metas.slice(2).map((m) => <MetaCard key={m.id} m={m} onEdit={() => openEdit(m)} onAddValue={() => setAddValModal(m)} />)}
+                  </div>
+                ) : (
+                  <div className="faint" style={{ textAlign: 'center', padding: '20px 0', fontSize: 13 }}>
+                    Crie mais de 2 metas para ver a lista completa aqui.
+                  </div>
+                )
+              );
+              return null;
+            })}
           </div>
-
-          {metas.length > 2 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-              {metas.slice(2).map((m) => <MetaCard key={m.id} m={m} onEdit={() => openEdit(m)} onAddValue={() => setAddValModal(m)} />)}
-            </div>
-          )}
         </React.Fragment>
       )}
 

@@ -344,12 +344,21 @@ function InstitutionManagerModal({ onClose, defaultTab = 'inst' }) {
   );
 }
 
+const INV_WIDGETS = [
+  { id: 'stats',        label: 'Cards de resumo' },
+  { id: 'graficos',     label: 'Gráficos (Instituição + Tipo)' },
+  { id: 'instituicoes', label: 'Cards por instituição' },
+  { id: 'historico',    label: 'Histórico de aportes' },
+];
+
 /* ── Tela principal ────────────────────────────────────────────────────────── */
 function Investimentos() {
   const store = useInvestmentStore();
   const [modal, setModal] = useS(null);
-  const [instModal, setInstModal] = useS(null); // null | 'inst' | 'tipos'
+  const [instModal, setInstModal] = useS(null);
   const [search, setSearch] = useS('');
+  const [editing, setEditing] = useS(false);
+  const { visible, hidden, setVisible, moveUp, moveDown, reset } = useScreenLayout('investimentos', INV_WIDGETS);
 
   const all = store.getAll();
   const institutions = store.getInstitutions();
@@ -388,112 +397,87 @@ function Investimentos() {
 
   const rentabColor = rentab >= 0 ? 'var(--positive)' : 'var(--negative)';
 
-  return (
-    <div className="screen">
-      <PageHeader title="Investimentos" sub="Acompanhe seus aportes, instituições e rentabilidade.">
-        <button className="btn-ghost btn" onClick={() => setInstModal('tipos')}><Ic.receipt size={16}/>Tipos de ativo</button>
-        <button className="btn-ghost btn" onClick={() => setInstModal('inst')}><Ic.link size={16}/>Instituições</button>
-        <button className="btn" onClick={openNew}><Ic.plus size={16}/>Novo investimento</button>
-      </PageHeader>
+  const wrap = (id, content) => {
+    const idx = visible.findIndex(w => w.id === id);
+    return (
+      <ScreenWidget key={id} id={id} label={INV_WIDGETS.find(d => d.id === id)?.label}
+        editing={editing} isFirst={idx === 0} isLast={idx === visible.length - 1}
+        onHide={i => setVisible(i, false)} onMoveUp={moveUp} onMoveDown={moveDown}>
+        {content}
+      </ScreenWidget>
+    );
+  };
 
-      {/* ── Stat cards ── */}
-      <div className="stat-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 16 }}>
+  const SECTIONS = {
+    stats: (
+      <div className="stat-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
         <StatCard icon="wallet"    label="Total investido"      value={brl(totalInv)}         color="var(--primary)" />
         <StatCard icon="arrowUp"   label="Rentabilidade total"  value={`${rentab >= 0 ? '+' : ''}${brl(rentab)}`} color={rentabColor} />
         <StatCard icon="target"    label="Maior instituição"    value={maiorInst}              color="var(--accent)" />
         <StatCard icon="grid"      label="Aplicações"           value={`${all.length} invest.`} color="var(--ink-soft)" />
       </div>
-
-      {/* ── Row 1: donut instituição + donut tipo ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+    ),
+    graficos: (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <GlassCard style={{ padding: 22 }}>
           <CardTitle icon="filter" title="Distribuição por instituição" />
-          {porInst.length === 0 ? (
-            <div className="faint" style={{ textAlign: 'center', padding: '40px 0', fontSize: 13 }}>Adicione investimentos para ver a distribuição.</div>
-          ) : (
+          {porInst.length === 0 ? <div className="faint" style={{ textAlign: 'center', padding: '40px 0', fontSize: 13 }}>Adicione investimentos para ver a distribuição.</div> : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 14 }}>
-              <InvDonut
-                slices={porInst.map(p => ({ ...p, cor: instColor(p.nome, institutions) }))}
-                center={brl(totalInv)} sub="TOTAL"/>
+              <InvDonut slices={porInst.map(p => ({ ...p, cor: instColor(p.nome, institutions) }))} center={brl(totalInv)} sub="TOTAL"/>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
-                {porInst.map(p => {
-                  const pct = totalInv > 0 ? (p.valor / totalInv * 100).toFixed(1) : 0;
-                  const cor = instColor(p.nome, institutions);
-                  return (
-                    <div key={p.nome}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, marginBottom: 4 }}>
-                        <span style={{ width: 10, height: 10, borderRadius: 3, background: cor, flexShrink: 0 }}/>
-                        <span style={{ flex: 1, fontWeight: 600 }}>{p.nome}</span>
-                        <span className="faint" style={{ fontWeight: 600, fontSize: 11.5 }}>{pct}%</span>
-                        <span className="faint" style={{ fontWeight: 600 }}>{brl(p.valor)}</span>
-                      </div>
-                      <InvBar pct={parseFloat(pct)} color={cor}/>
-                    </div>
-                  );
-                })}
+                {porInst.map(p => { const pct = totalInv > 0 ? (p.valor/totalInv*100).toFixed(1) : 0; const cor = instColor(p.nome, institutions); return (
+                  <div key={p.nome}><div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, marginBottom: 4 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: cor, flexShrink: 0 }}/>
+                    <span style={{ flex: 1, fontWeight: 600 }}>{p.nome}</span>
+                    <span className="faint" style={{ fontWeight: 600, fontSize: 11.5 }}>{pct}%</span>
+                    <span className="faint" style={{ fontWeight: 600 }}>{brl(p.valor)}</span>
+                  </div><InvBar pct={parseFloat(pct)} color={cor}/></div>
+                ); })}
               </div>
             </div>
           )}
         </GlassCard>
-
         <GlassCard style={{ padding: 22 }}>
           <CardTitle icon="grid" title="Distribuição por tipo" />
-          {porTipo.length === 0 ? (
-            <div className="faint" style={{ textAlign: 'center', padding: '40px 0', fontSize: 13 }}>Sem dados ainda.</div>
-          ) : (
+          {porTipo.length === 0 ? <div className="faint" style={{ textAlign: 'center', padding: '40px 0', fontSize: 13 }}>Sem dados ainda.</div> : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 14 }}>
-              <InvDonut slices={porTipo.map(p => ({ nome: p.tipo, valor: p.valor, cor: p.cor }))}
-                center={`${porTipo.length} tipos`} sub="INVESTIDOS"/>
+              <InvDonut slices={porTipo.map(p => ({ nome: p.tipo, valor: p.valor, cor: p.cor }))} center={`${porTipo.length} tipos`} sub="INVESTIDOS"/>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
-                {porTipo.map(p => {
-                  const pct = totalInv > 0 ? (p.valor / totalInv * 100).toFixed(1) : 0;
-                  return (
-                    <div key={p.tipo}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, marginBottom: 4 }}>
-                        <span style={{ width: 10, height: 10, borderRadius: 3, background: p.cor, flexShrink: 0 }}/>
-                        <span style={{ flex: 1, fontWeight: 600 }}>{p.tipo}</span>
-                        <span className="faint" style={{ fontWeight: 600, fontSize: 11.5 }}>{pct}%</span>
-                        <span className="faint" style={{ fontWeight: 600 }}>{brl(p.valor)}</span>
-                      </div>
-                      <InvBar pct={parseFloat(pct)} color={p.cor}/>
-                    </div>
-                  );
-                })}
+                {porTipo.map(p => { const pct = totalInv > 0 ? (p.valor/totalInv*100).toFixed(1) : 0; return (
+                  <div key={p.tipo}><div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, marginBottom: 4 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: p.cor, flexShrink: 0 }}/>
+                    <span style={{ flex: 1, fontWeight: 600 }}>{p.tipo}</span>
+                    <span className="faint" style={{ fontWeight: 600, fontSize: 11.5 }}>{pct}%</span>
+                    <span className="faint" style={{ fontWeight: 600 }}>{brl(p.valor)}</span>
+                  </div><InvBar pct={parseFloat(pct)} color={p.cor}/></div>
+                ); })}
               </div>
             </div>
           )}
         </GlassCard>
       </div>
-
-      {/* ── Row 2: caixinhas por instituição ── */}
-      {porInst.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14, marginBottom: 16 }}>
-          {porInst.map(p => {
-            const cor = instColor(p.nome, institutions);
-            const pct = totalInv > 0 ? (p.valor / totalInv * 100) : 0;
-            const qtd = all.filter(i => i.instituicao === p.nome).length;
-            return (
-              <GlassCard key={p.nome} style={{ padding: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 10, background: `color-mix(in oklab, ${cor} 18%, transparent)`,
-                    display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                    <Ic.wallet size={18} style={{ color: cor }}/>
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nome}</div>
-                    <div className="faint" style={{ fontSize: 11.5 }}>{qtd} aplicaç{qtd === 1 ? 'ão' : 'ões'}</div>
-                  </div>
-                </div>
-                <div style={{ fontWeight: 800, fontSize: 20, color: cor, marginBottom: 8 }}>{brl(p.valor)}</div>
-                <InvBar pct={pct} color={cor}/>
-                <div className="faint" style={{ fontSize: 11, marginTop: 5, textAlign: 'right' }}>{pct.toFixed(1)}% do total</div>
-              </GlassCard>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Histórico de investimentos ── */}
+    ),
+    instituicoes: porInst.length > 0 ? (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
+        {porInst.map(p => { const cor = instColor(p.nome, institutions); const pct = totalInv > 0 ? (p.valor/totalInv*100) : 0; const qtd = all.filter(i => i.instituicao === p.nome).length; return (
+          <GlassCard key={p.nome} style={{ padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: `color-mix(in oklab, ${cor} 18%, transparent)`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                <Ic.wallet size={18} style={{ color: cor }}/>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nome}</div>
+                <div className="faint" style={{ fontSize: 11.5 }}>{qtd} aplicaç{qtd === 1 ? 'ão' : 'ões'}</div>
+              </div>
+            </div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: cor, marginBottom: 8 }}>{brl(p.valor)}</div>
+            <InvBar pct={pct} color={cor}/>
+            <div className="faint" style={{ fontSize: 11, marginTop: 5, textAlign: 'right' }}>{pct.toFixed(1)}% do total</div>
+          </GlassCard>
+        ); })}
+      </div>
+    ) : <div className="faint" style={{ textAlign:'center', padding:'20px 0', fontSize:13 }}>Sem dados de instituições ainda.</div>,
+    historico: (
       <GlassCard style={{ padding: 22 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
           <CardTitle icon="receipt" title="Histórico de investimentos" style={{ flex: 1, margin: 0 }}/>
@@ -502,88 +486,70 @@ function Investimentos() {
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar…"/>
           </div>
         </div>
-
         {filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '50px 0' }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>📈</div>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Nenhum investimento registrado</div>
-            <div className="faint" style={{ fontSize: 13, marginBottom: 18 }}>Clique em "Novo investimento" para começar a acompanhar sua carteira.</div>
+            <div className="faint" style={{ fontSize: 13, marginBottom: 18 }}>Clique em "Novo investimento" para começar.</div>
             <button className="btn" onClick={openNew}><Ic.plus size={16}/>Novo investimento</button>
           </div>
         ) : (
           <div>
-            {/* Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px 120px 130px 100px 100px', gap: 12,
-              padding: '6px 10px', borderBottom: '1px solid var(--line)', marginBottom: 4 }}>
-              {['Nome', 'Instituição', 'Tipo', 'Valor', 'Data', 'Ações'].map(h => (
-                <div key={h} className="faint" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>{h}</div>
-              ))}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px 120px 130px 100px 100px', gap: 12, padding: '6px 10px', borderBottom: '1px solid var(--line)', marginBottom: 4 }}>
+              {['Nome','Instituição','Tipo','Valor','Data','Ações'].map(h => <div key={h} className="faint" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>{h}</div>)}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {filtered.map((inv, idx) => {
                 const cor = instColor(inv.instituicao, institutions);
                 const tipoCor = INVEST_TYPE_COLORS[inv.tipo] || '#97798a';
-                const rentab = (inv.valor_atual || inv.valor) - inv.valor;
+                const rentabVal = (inv.valor_atual || inv.valor) - inv.valor;
                 const hasRentab = inv.valor_atual && inv.valor_atual !== inv.valor;
                 return (
-                  <div key={inv.id} style={{ display: 'grid', gridTemplateColumns: '1fr 140px 120px 130px 100px 100px', gap: 12,
-                    padding: '12px 10px', borderBottom: idx < filtered.length - 1 ? '1px solid var(--line)' : 'none',
-                    alignItems: 'center', transition: 'background 0.15s' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--chip-bg)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    {/* Nome */}
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{inv.nome}</div>
-                      {inv.obs && <div className="faint" style={{ fontSize: 11.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{inv.obs}</div>}
-                    </div>
-                    {/* Instituição */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: cor, flexShrink: 0 }}/>
-                      <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{inv.instituicao}</span>
-                    </div>
-                    {/* Tipo */}
-                    <div>
-                      <span className="chip" style={{ background: `color-mix(in oklab, ${tipoCor} 16%, transparent)`,
-                        color: tipoCor, border: 'none', fontSize: 11.5, padding: '3px 9px' }}>{inv.tipo}</span>
-                    </div>
-                    {/* Valor */}
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--positive)' }}>+{brl(inv.valor)}</div>
-                      {hasRentab && (
-                        <div style={{ fontSize: 11.5, fontWeight: 600, color: rentab >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
-                          atual: {brl(inv.valor_atual)} ({rentab >= 0 ? '+' : ''}{rentab.toFixed(2).replace('.',',')}%)
-                        </div>
-                      )}
-                    </div>
-                    {/* Data */}
+                  <div key={inv.id} style={{ display: 'grid', gridTemplateColumns: '1fr 140px 120px 130px 100px 100px', gap: 12, padding: '12px 10px', borderBottom: idx < filtered.length-1 ? '1px solid var(--line)' : 'none', alignItems: 'center', transition: 'background 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--chip-bg)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <div style={{ minWidth: 0 }}><div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{inv.nome}</div>{inv.obs && <div className="faint" style={{ fontSize: 11.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{inv.obs}</div>}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: cor, flexShrink: 0 }}/><span style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{inv.instituicao}</span></div>
+                    <div><span className="chip" style={{ background: `color-mix(in oklab, ${tipoCor} 16%, transparent)`, color: tipoCor, border: 'none', fontSize: 11.5, padding: '3px 9px' }}>{inv.tipo}</span></div>
+                    <div><div style={{ fontWeight: 700, fontSize: 14, color: 'var(--positive)' }}>+{brl(inv.valor)}</div>{hasRentab && <div style={{ fontSize: 11.5, fontWeight: 600, color: rentabVal >= 0 ? 'var(--positive)' : 'var(--negative)' }}>atual: {brl(inv.valor_atual)}</div>}</div>
                     <div className="faint" style={{ fontSize: 13, fontWeight: 600 }}>{fmtDate(inv.data)}</div>
-                    {/* Ações */}
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="icon-btn" style={{ width: 30, height: 30 }} title="Editar" onClick={() => openEdit(inv)}><Ic.edit size={14}/></button>
-                      <button className="icon-btn" style={{ width: 30, height: 30 }} title="Duplicar"
-                        onClick={() => { store.duplicate(inv.id); window.showToast && window.showToast('✓ Investimento duplicado'); }}>
-                        <Ic.plus size={14}/>
-                      </button>
-                      <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--negative)' }} title="Excluir"
-                        onClick={() => { store.remove(inv.id); window.showToast && window.showToast('Removido', 'info'); }}>
-                        <Ic.trash size={14}/>
-                      </button>
+                      <button className="icon-btn" style={{ width: 30, height: 30 }} onClick={() => openEdit(inv)}><Ic.edit size={14}/></button>
+                      <button className="icon-btn" style={{ width: 30, height: 30 }} onClick={() => { store.duplicate(inv.id); window.showToast && window.showToast('✓ Duplicado'); }}><Ic.plus size={14}/></button>
+                      <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--negative)' }} onClick={() => { store.remove(inv.id); window.showToast && window.showToast('Removido','info'); }}><Ic.trash size={14}/></button>
                     </div>
                   </div>
                 );
               })}
             </div>
-            {/* Totais rodapé */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 24, padding: '12px 10px 0',
-              borderTop: '1px solid var(--line)', marginTop: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 24, padding: '12px 10px 0', borderTop: '1px solid var(--line)', marginTop: 4 }}>
               <span className="faint" style={{ fontSize: 12.5 }}>{filtered.length} de {all.length} registros</span>
               <span style={{ fontWeight: 700, fontSize: 14 }}>Total: <span style={{ color: 'var(--positive)' }}>{brl(filtered.reduce((s,i) => s + i.valor, 0))}</span></span>
             </div>
           </div>
         )}
       </GlassCard>
+    ),
+  };
 
-      {/* Modais */}
+  return (
+    <div className="screen">
+      <PageHeader title="Investimentos" sub="Acompanhe seus aportes, instituições e rentabilidade.">
+        <button className="btn-ghost btn" onClick={() => setInstModal('tipos')}><Ic.receipt size={16}/>Tipos de ativo</button>
+        <button className="btn-ghost btn" onClick={() => setInstModal('inst')}><Ic.link size={16}/>Instituições</button>
+        <button className="btn-ghost btn" onClick={() => setEditing(e => !e)}
+          style={editing ? { background: 'color-mix(in oklab, var(--primary) 14%, transparent)', borderColor: 'var(--primary)', color: 'var(--primary)' } : {}}>
+          <Ic.edit size={16}/>{editing ? 'Editando…' : 'Personalizar'}
+        </button>
+        <button className="btn" onClick={openNew}><Ic.plus size={16}/>Novo investimento</button>
+      </PageHeader>
+
+      <ScreenEditBanner editing={editing} hidden={hidden} defs={INV_WIDGETS}
+        onToggle={(id, v) => setVisible(id, v)} onReset={reset} onDone={() => setEditing(false)} />
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {visible.map(w => wrap(w.id, SECTIONS[w.id]))}
+      </div>
+
       {modal && <InvestModal modal={modal} onSave={save} onClose={() => setModal(null)} />}
       {instModal && <InstitutionManagerModal defaultTab={instModal} onClose={() => setInstModal(null)} />}
     </div>

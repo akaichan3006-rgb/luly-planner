@@ -540,3 +540,42 @@ function useInvestmentStore() {
   return InvestmentStore;
 }
 window.useInvestmentStore = useInvestmentStore;
+
+// ─── Generic per-screen layout (order + visibility) ──────────────────────────
+function useScreenLayout(screenId, defs) {
+  const KEY = `ps_layout_${screenId}`;
+  const load = () => {
+    try {
+      const s = localStorage.getItem(KEY);
+      if (s) {
+        const saved = JSON.parse(s);
+        return defs.map((d, i) => {
+          const found = saved.find(x => x.id === d.id);
+          return found ? { id: d.id, order: found.order ?? i, visible: found.visible ?? true } : { id: d.id, order: i, visible: true };
+        }).sort((a, b) => a.order - b.order);
+      }
+    } catch(e) {}
+    return defs.map((d, i) => ({ id: d.id, order: i, visible: true }));
+  };
+  const [layout, setLayout] = React.useState(load);
+  const save = (next) => { setLayout(next); localStorage.setItem(KEY, JSON.stringify(next)); };
+  const sorted = [...layout].sort((a, b) => a.order - b.order);
+  const visible = sorted.filter(w => w.visible);
+  const hidden  = sorted.filter(w => !w.visible);
+  const setVisible = (id, v) => save(layout.map(w => w.id === id ? { ...w, visible: v } : w));
+  const moveUp   = (id) => {
+    const s = [...sorted]; const i = s.findIndex(w => w.id === id);
+    if (i <= 0) return;
+    [s[i-1], s[i]] = [s[i], s[i-1]];
+    save(s.map((w, j) => ({ ...w, order: j })));
+  };
+  const moveDown = (id) => {
+    const s = [...sorted]; const i = s.findIndex(w => w.id === id);
+    if (i < 0 || i >= s.length - 1) return;
+    [s[i], s[i+1]] = [s[i+1], s[i]];
+    save(s.map((w, j) => ({ ...w, order: j })));
+  };
+  const reset = () => save(defs.map((d, i) => ({ id: d.id, order: i, visible: true })));
+  return { layout: sorted, visible, hidden, setVisible, moveUp, moveDown, reset };
+}
+window.useScreenLayout = useScreenLayout;
