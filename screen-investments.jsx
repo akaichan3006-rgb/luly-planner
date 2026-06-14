@@ -59,7 +59,7 @@ function InvestModal({ modal, onSave, onClose }) {
   const store = InvestmentStore;
   const institutions = store.getInstitutions();
   const [f, setF] = useS(() => modal.entry ? { ...modal.entry } : {
-    nome: '', instituicao: institutions[0] || 'Nubank', tipo: 'CDB',
+    nome: '', instituicao: institutions[0] || 'Nubank', tipo: store.getTypes()[0] || 'CDB',
     valor: '', data: new Date().toISOString().slice(0,10), obs: '',
     valor_atual: '',
   });
@@ -73,6 +73,16 @@ function InvestModal({ modal, onSave, onClose }) {
     const ok = store.addInstitution(newInst);
     if (ok) { set('instituicao', newInst.trim()); setAddingInst(false); setNewInst(''); window.showToast && window.showToast(`Instituição "${newInst.trim()}" adicionada!`); }
     else { window.showToast && window.showToast('Já existe essa instituição.', 'error'); }
+  };
+
+  // Add new type inline
+  const [addingType, setAddingType] = useS(false);
+  const [newType, setNewType] = useS('');
+  const confirmType = () => {
+    if (!newType.trim()) return;
+    const ok = store.addType(newType);
+    if (ok) { set('tipo', newType.trim()); setAddingType(false); setNewType(''); window.showToast && window.showToast(`Tipo "${newType.trim()}" adicionado!`); }
+    else { window.showToast && window.showToast('Esse tipo já existe.', 'error'); }
   };
 
   const valid = f.nome.trim() && f.valor && parseFloat(String(f.valor).replace(',','.')) > 0;
@@ -117,10 +127,11 @@ function InvestModal({ modal, onSave, onClose }) {
           <div>
             <label className="ev-label">Tipo</label>
             <div className="field" style={{ marginTop: 6, padding: 0, overflow: 'hidden' }}>
-              <select value={f.tipo} onChange={e => set('tipo', e.target.value)}
+              <select value={f.tipo} onChange={e => { if (e.target.value === '__new__') setAddingType(true); else set('tipo', e.target.value); }}
                 style={{ flex: 1, border: 'none', background: 'none', padding: '10px 12px', outline: 'none',
                   fontFamily: 'var(--font-ui)', fontSize: 14, color: 'var(--ink)', cursor: 'pointer' }}>
-                {INVEST_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                {store.getTypes().map(t => <option key={t} value={t}>{t}</option>)}
+                <option value="__new__">+ Criar tipo personalizado</option>
               </select>
             </div>
           </div>
@@ -136,6 +147,19 @@ function InvestModal({ modal, onSave, onClose }) {
             </div>
             <button className="btn" style={{ padding: '8px 14px', fontSize: 12.5, flexShrink: 0 }} onClick={confirmInst}><Ic.check size={14}/>Adicionar</button>
             <button className="btn-ghost btn" style={{ padding: '8px 12px', fontSize: 12.5 }} onClick={() => { setAddingInst(false); setNewInst(''); }}>✕</button>
+          </div>
+        )}
+
+        {/* Inline add type */}
+        {addingType && (
+          <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 14, background: 'var(--chip-bg)', border: '1px solid var(--line)', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div className="field" style={{ flex: 1, marginTop: 0 }}>
+              <Ic.receipt size={14} style={{ color: 'var(--ink-faint)' }}/>
+              <input value={newType} autoFocus onChange={e => setNewType(e.target.value)} placeholder="Ex.: FIDC, Ouro, Câmbio…" maxLength={30}
+                onKeyDown={e => { if (e.key === 'Enter') confirmType(); if (e.key === 'Escape') setAddingType(false); }}/>
+            </div>
+            <button className="btn" style={{ padding: '8px 14px', fontSize: 12.5, flexShrink: 0 }} onClick={confirmType}><Ic.check size={14}/>Criar</button>
+            <button className="btn-ghost btn" style={{ padding: '8px 12px', fontSize: 12.5 }} onClick={() => { setAddingType(false); setNewType(''); }}>✕</button>
           </div>
         )}
 
@@ -194,48 +218,124 @@ function InvestModal({ modal, onSave, onClose }) {
   );
 }
 
-/* ── Modal de gerenciar instituições ──────────────────────────────────────── */
-function InstitutionManagerModal({ onClose }) {
+/* ── Modal de gerenciar instituições e tipos ──────────────────────────────── */
+function InstitutionManagerModal({ onClose, defaultTab = 'inst' }) {
   const store = useInvestmentStore();
+  const [tab, setTab] = useS(defaultTab);
   const [newInst, setNewInst] = useS('');
-  const institutions = store.getInstitutions();
+  const [newType, setNewType] = useS('');
+  const [confirmReset, setConfirmReset] = useS(false);
 
-  const add = () => {
+  const institutions = store.getInstitutions();
+  const types        = store.getTypes();
+
+  const addInst = () => {
     if (!newInst.trim()) return;
     const ok = store.addInstitution(newInst);
     if (ok) { setNewInst(''); window.showToast && window.showToast(`"${newInst.trim()}" adicionada!`); }
     else { window.showToast && window.showToast('Já existe essa instituição.', 'error'); }
   };
 
+  const addType = () => {
+    if (!newType.trim()) return;
+    const ok = store.addType(newType);
+    if (ok) { setNewType(''); window.showToast && window.showToast(`Tipo "${newType.trim()}" criado!`); }
+    else { window.showToast && window.showToast('Esse tipo já existe.', 'error'); }
+  };
+
+  const TYPE_COLORS_CYCLE = ['#9E4A69','#7c93c4','#4f9d7e','#d29a52','#C67C96','#caa7d0','#e07a88','#6abfa0','#b87fc9','#d4a0b0'];
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(40,20,30,0.4)',
       backdropFilter: 'blur(4px)', display: 'grid', placeItems: 'center', padding: 20 }}>
-      <GlassCard onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, padding: 26 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-          <h3 className="serif" style={{ margin: 0, fontSize: 22 }}>Instituições</h3>
+      <GlassCard onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, padding: 26, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h3 className="serif" style={{ margin: 0, fontSize: 22 }}>Personalizar listas</h3>
           <button className="icon-btn" onClick={onClose}><Ic.plus size={18} style={{ transform: 'rotate(45deg)' }}/></button>
         </div>
-        <div className="field">
-          <Ic.link size={15} style={{ color: 'var(--ink-faint)' }}/>
-          <input value={newInst} onChange={e => setNewInst(e.target.value)} placeholder="Nova instituição (ex: XP, BTG…)"
-            onKeyDown={e => e.key === 'Enter' && add()} maxLength={30}/>
-          <button className="btn" style={{ padding: '6px 14px', fontSize: 13, borderRadius: 10 }} onClick={add}><Ic.plus size={14}/></button>
-        </div>
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflowY: 'auto' }}>
-          {institutions.map(inst => (
-            <div key={inst} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
-              borderRadius: 12, background: 'var(--chip-bg)' }}>
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: instColor(inst, institutions), flexShrink: 0 }}/>
-              <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{inst}</span>
-              {!INVEST_DEFAULT_INST.includes(inst) && (
-                <button className="icon-btn" style={{ width: 28, height: 28, color: 'var(--negative)' }}
-                  onClick={() => { store.removeInstitution(inst); window.showToast && window.showToast(`"${inst}" removida`, 'info'); }}>
-                  <Ic.trash size={14}/>
-                </button>
-              )}
-            </div>
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+          {[{ id: 'inst', label: 'Instituições' }, { id: 'tipos', label: 'Tipos de ativo' }].map(t => (
+            <button key={t.id} onClick={() => { setTab(t.id); setConfirmReset(false); }}
+              style={{ flex: 1, padding: '8px 0', borderRadius: 11, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 13.5,
+                background: tab === t.id ? 'var(--primary)' : 'var(--chip-bg)', color: tab === t.id ? '#fff' : 'var(--ink-soft)', transition: 'all 0.15s' }}>
+              {t.label}
+            </button>
           ))}
         </div>
+
+        {tab === 'inst' && (
+          <React.Fragment>
+            <div className="field">
+              <Ic.link size={15} style={{ color: 'var(--ink-faint)' }}/>
+              <input value={newInst} onChange={e => setNewInst(e.target.value)} placeholder="Nova instituição (ex: XP, BTG…)"
+                onKeyDown={e => e.key === 'Enter' && addInst()} maxLength={30}/>
+              <button className="btn" style={{ padding: '6px 14px', fontSize: 13, borderRadius: 10 }} onClick={addInst}><Ic.plus size={14}/></button>
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', flex: 1 }}>
+              {institutions.map(inst => (
+                <div key={inst} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 12, background: 'var(--chip-bg)' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: instColor(inst, institutions), flexShrink: 0 }}/>
+                  <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{inst}</span>
+                  {INVEST_DEFAULT_INST.includes(inst)
+                    ? <span className="faint" style={{ fontSize: 11 }}>padrão</span>
+                    : <button className="icon-btn" style={{ width: 28, height: 28, color: 'var(--negative)' }}
+                        onClick={() => { store.removeInstitution(inst); window.showToast && window.showToast(`"${inst}" removida`, 'info'); }}>
+                        <Ic.trash size={14}/>
+                      </button>
+                  }
+                </div>
+              ))}
+            </div>
+          </React.Fragment>
+        )}
+
+        {tab === 'tipos' && (
+          <React.Fragment>
+            <div className="field">
+              <Ic.receipt size={15} style={{ color: 'var(--ink-faint)' }}/>
+              <input value={newType} onChange={e => setNewType(e.target.value)} placeholder="Novo tipo (ex: FIDC, Ouro, Câmbio…)"
+                onKeyDown={e => e.key === 'Enter' && addType()} maxLength={30}/>
+              <button className="btn" style={{ padding: '6px 14px', fontSize: 13, borderRadius: 10 }} onClick={addType}><Ic.plus size={14}/></button>
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', flex: 1 }}>
+              {types.map((t, idx) => {
+                const cor = INVEST_TYPE_COLORS[t] || TYPE_COLORS_CYCLE[idx % TYPE_COLORS_CYCLE.length];
+                return (
+                  <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 12, background: 'var(--chip-bg)' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: cor, flexShrink: 0 }}/>
+                    <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{t}</span>
+                    {INVEST_DEFAULT_TYPES.includes(t)
+                      ? <span className="faint" style={{ fontSize: 11 }}>padrão</span>
+                      : <button className="icon-btn" style={{ width: 28, height: 28, color: 'var(--negative)' }}
+                          onClick={() => { store.removeType(t); window.showToast && window.showToast(`"${t}" removido`, 'info'); }}>
+                          <Ic.trash size={14}/>
+                        </button>
+                    }
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+              {!confirmReset ? (
+                <button className="btn-ghost btn" onClick={() => setConfirmReset(true)} style={{ width: '100%', justifyContent: 'center', color: 'var(--negative)', fontSize: 12.5 }}>
+                  <Ic.sync size={13}/>Restaurar tipos padrão
+                </button>
+              ) : (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span className="faint" style={{ flex: 1, fontSize: 12 }}>Remove os tipos personalizados?</span>
+                  <button className="btn-ghost btn" style={{ padding: '5px 12px', fontSize: 12 }} onClick={() => setConfirmReset(false)}>Não</button>
+                  <button className="btn" style={{ padding: '5px 12px', fontSize: 12, background: 'var(--negative)' }}
+                    onClick={() => { store.resetTypes(); setConfirmReset(false); window.showToast && window.showToast('Tipos restaurados!'); }}>
+                    <Ic.check size={13}/>Sim
+                  </button>
+                </div>
+              )}
+            </div>
+          </React.Fragment>
+        )}
+
         <div style={{ marginTop: 16, textAlign: 'right' }}>
           <button className="btn" onClick={onClose}>Fechar</button>
         </div>
@@ -248,7 +348,7 @@ function InstitutionManagerModal({ onClose }) {
 function Investimentos() {
   const store = useInvestmentStore();
   const [modal, setModal] = useS(null);
-  const [instModal, setInstModal] = useS(false);
+  const [instModal, setInstModal] = useS(null); // null | 'inst' | 'tipos'
   const [search, setSearch] = useS('');
 
   const all = store.getAll();
@@ -291,7 +391,8 @@ function Investimentos() {
   return (
     <div className="screen">
       <PageHeader title="Investimentos" sub="Acompanhe seus aportes, instituições e rentabilidade.">
-        <button className="btn-ghost btn" onClick={() => setInstModal(true)}><Ic.link size={16}/>Instituições</button>
+        <button className="btn-ghost btn" onClick={() => setInstModal('tipos')}><Ic.receipt size={16}/>Tipos de ativo</button>
+        <button className="btn-ghost btn" onClick={() => setInstModal('inst')}><Ic.link size={16}/>Instituições</button>
         <button className="btn" onClick={openNew}><Ic.plus size={16}/>Novo investimento</button>
       </PageHeader>
 
@@ -484,7 +585,7 @@ function Investimentos() {
 
       {/* Modais */}
       {modal && <InvestModal modal={modal} onSave={save} onClose={() => setModal(null)} />}
-      {instModal && <InstitutionManagerModal onClose={() => setInstModal(false)} />}
+      {instModal && <InstitutionManagerModal defaultTab={instModal} onClose={() => setInstModal(null)} />}
     </div>
   );
 }

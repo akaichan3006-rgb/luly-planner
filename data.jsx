@@ -425,31 +425,42 @@ function useHabitStore() {
 window.useHabitStore = useHabitStore;
 
 // ─── InvestmentStore ─────────────────────────────────────────────────────────
-const INVEST_TYPES = ['CDB','Tesouro Direto','LCI','LCA','Fundo','Ações','ETF','Criptomoedas','Poupança','Outro'];
+const INVEST_DEFAULT_TYPES = [
+  'CDB','Tesouro Direto','LCI','LCA','LIG',
+  'Fundo','FII','Ações','ETF','BDR',
+  'Criptomoedas','Debêntures','COE','CRI/CRA',
+  'Previdência Privada','Conta Remunerada','Poupança','Outro',
+];
 const INVEST_DEFAULT_INST = ['Nubank','Mercado Pago','Inter'];
 const INVEST_TYPE_COLORS = {
   'CDB':'#9E4A69','Tesouro Direto':'#7c93c4','LCI':'#4f9d7e','LCA':'#6abfa0',
-  'Fundo':'#d29a52','Ações':'#C67C96','ETF':'#caa7d0','Criptomoedas':'#e07a88',
+  'LIG':'#5ab4a0','Fundo':'#d29a52','FII':'#c4884a','Ações':'#C67C96','ETF':'#caa7d0',
+  'BDR':'#b87fc9','Criptomoedas':'#e07a88','Debêntures':'#8aaddb','COE':'#a3b86c',
+  'CRI/CRA':'#7eada0','Previdência Privada':'#9b84c4','Conta Remunerada':'#d4a0b0',
   'Poupança':'#9fb2e0','Outro':'#97798a',
 };
-window.INVEST_TYPES = INVEST_TYPES;
+window.INVEST_DEFAULT_TYPES = INVEST_DEFAULT_TYPES;
 window.INVEST_DEFAULT_INST = INVEST_DEFAULT_INST;
 window.INVEST_TYPE_COLORS = INVEST_TYPE_COLORS;
 
 const InvestmentStore = (() => {
-  const KEY      = 'ps_investments';
-  const INST_KEY = 'ps_invest_institutions';
+  const KEY       = 'ps_investments';
+  const INST_KEY  = 'ps_invest_institutions';
+  const TYPES_KEY = 'ps_invest_types';
   const listeners = new Set();
   const emit = () => listeners.forEach(l => l());
 
-  let state = _load(KEY, null) || [];
-  let institutions = _load(INST_KEY, null) || [...INVEST_DEFAULT_INST];
+  let state        = _load(KEY, null)       || [];
+  let institutions = _load(INST_KEY, null)  || [...INVEST_DEFAULT_INST];
+  let types        = _load(TYPES_KEY, null) || [...INVEST_DEFAULT_TYPES];
 
-  const persist = () => { localStorage.setItem(KEY, JSON.stringify(state)); emit(); };
-  const persistInst = () => { localStorage.setItem(INST_KEY, JSON.stringify(institutions)); emit(); };
+  const persist      = () => { localStorage.setItem(KEY,       JSON.stringify(state));        emit(); };
+  const persistInst  = () => { localStorage.setItem(INST_KEY,  JSON.stringify(institutions)); emit(); };
+  const persistTypes = () => { localStorage.setItem(TYPES_KEY, JSON.stringify(types));        emit(); };
 
-  const getAll = () => state;
+  const getAll         = () => state;
   const getInstitutions = () => institutions;
+  const getTypes        = () => types;
 
   const add = (inv) => {
     const rec = { id: _uid('inv'), created_at: new Date().toISOString(), valor_atual: inv.valor, ...inv };
@@ -473,6 +484,17 @@ const InvestmentStore = (() => {
     if (INVEST_DEFAULT_INST.includes(name)) return false;
     institutions = institutions.filter(i => i !== name); persistInst(); return true;
   };
+
+  const addType = (name) => {
+    const n = name.trim();
+    if (!n || types.includes(n)) return false;
+    types = [...types, n]; persistTypes(); return true;
+  };
+  const removeType = (name) => {
+    if (INVEST_DEFAULT_TYPES.includes(name)) return false;
+    types = types.filter(t => t !== name); persistTypes(); return true;
+  };
+  const resetTypes = () => { types = [...INVEST_DEFAULT_TYPES]; persistTypes(); };
 
   // ── Computed ──
   const getTotalInvestido = () => state.reduce((s, i) => s + (i.valor || 0), 0);
@@ -503,8 +525,8 @@ const InvestmentStore = (() => {
   };
 
   return {
-    getAll, getInstitutions, add, update, remove, duplicate,
-    addInstitution, removeInstitution,
+    getAll, getInstitutions, getTypes, add, update, remove, duplicate,
+    addInstitution, removeInstitution, addType, removeType, resetTypes,
     getTotalInvestido, getTotalAtual, getRentabilidade,
     getPorInstituicao, getPorTipo, getMaiorInstituicao,
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
