@@ -60,6 +60,7 @@ function Financeiro({ go }) {
   const [modal, setModal] = useS(null);
   const [catModal, setCatModal] = useS(false);
   const [cardModal, setCardModal] = useS(null);
+  const [alloModal, setAlloModal] = useS(false);
   const [editing, setEditing] = useS(false);
   const { visible, hidden, setVisible, moveUp, moveDown, reset } = useScreenLayout('financeiro', FINANCE_WIDGETS);
 
@@ -126,7 +127,19 @@ function Financeiro({ go }) {
 
         if (w.id === 'stats') return wrap(
           <div className="stat-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
-            <StatCard icon="wallet"    label="Saldo atual"     value={brl(store.getSaldo())}       color="var(--primary)" />
+            <div style={{ position: 'relative' }}>
+              <StatCard icon="wallet" label="Saldo atual" value={brl(store.getSaldo())} color="var(--primary)" />
+              <button onClick={() => setAlloModal(true)}
+                style={{ position: 'absolute', bottom: 10, right: 12, padding: '3px 9px', borderRadius: 999,
+                  background: 'color-mix(in oklab, var(--primary) 13%, transparent)',
+                  border: '1px solid color-mix(in oklab, var(--primary) 28%, transparent)',
+                  color: 'var(--primary)', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                  fontFamily: 'var(--font-ui)', display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in oklab, var(--primary) 22%, transparent)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'color-mix(in oklab, var(--primary) 13%, transparent)'}>
+                <Ic.arrowUp size={11}/>Alocar
+              </button>
+            </div>
             <StatCard icon="arrowDown" label="Entradas do mês" value={brl(store.getEntradasMes())} color="var(--positive)" />
             <StatCard icon="arrowUp"   label="Saídas do mês"   value={brl(store.getSaidasMes())}   color="var(--negative)" />
             <StatCard icon="leaf"      label="Economia do mês" value={brl(store.getEconomiaMes())} color="var(--accent)" />
@@ -313,6 +326,35 @@ function Financeiro({ go }) {
         <CardManagerModal
           cardStore={cardStore}
           onClose={() => setCardModal(null)}
+        />
+      )}
+      {alloModal && (
+        <AllocateToInvestModal
+          saldo={store.getSaldo()}
+          onSave={(valor, desc, tipo, inst) => {
+            store.add('despesa', {
+              desc: desc || 'Aporte em investimentos',
+              cat: 'Investimentos',
+              valor,
+              dia: new Date().getDate(),
+              recorrente: false,
+              tipo_lancamento: 'debito',
+            });
+            if (tipo) {
+              const invStore = window.InvestmentStore;
+              if (invStore) invStore.add({
+                nome: desc || 'Aporte',
+                tipo,
+                instituicao: inst || '',
+                valor_inicial: valor,
+                valor_atual: valor,
+                data: new Date().toISOString().slice(0,10),
+              });
+            }
+            showToast('✓ Aporte registrado');
+            setAlloModal(false);
+          }}
+          onClose={() => setAlloModal(false)}
         />
       )}
     </div>
@@ -821,6 +863,100 @@ function CardEditForm({ card: initCard, isNew, onSave, onDelete, onBack }) {
   );
 }
 
+// ── AllocateToInvestModal ─────────────────────────────────────────────────────
+function AllocateToInvestModal({ saldo, onSave, onClose }) {
+  const invStore = useInvestmentStore ? useInvestmentStore() : null;
+  const tipos = invStore ? invStore.getTypes() : (window.INVEST_DEFAULT_TYPES || []);
+  const [val, setVal]   = useS('');
+  const [desc, setDesc] = useS('');
+  const [tipo, setTipo] = useS('');
+  const [inst, setInst] = useS('');
+  const [linkInv, setLinkInv] = useS(false);
+
+  const num = parseFloat(val) || 0;
+  const valid = num > 0 && num <= saldo;
+
+  return (
+    <ModalShell title="Alocar para investimentos" onClose={onClose}>
+      <div style={{ padding: '10px 14px', borderRadius: 12, marginBottom: 18,
+        background: 'color-mix(in oklab, var(--primary) 9%, transparent)',
+        border: '1px solid color-mix(in oklab, var(--primary) 20%, transparent)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span className="faint" style={{ fontSize: 13, fontWeight: 600 }}>Saldo disponível</span>
+        <span style={{ fontWeight: 800, fontSize: 16, color: 'var(--primary)' }}>{brl(saldo)}</span>
+      </div>
+
+      <label className="ev-label">Valor a alocar (R$)</label>
+      <div className="field" style={{ marginTop: 6, padding: '10px 12px' }}>
+        <Ic.arrowUp size={16} style={{ color: 'var(--primary)' }}/>
+        <input autoFocus type="number" min="0.01" max={saldo} step="0.01"
+          value={val} onChange={e => setVal(e.target.value)} placeholder="0,00"
+          style={{ flex:1, border:'none', background:'none', outline:'none', fontFamily:'var(--font-ui)', fontSize:14, color:'var(--ink)' }}/>
+      </div>
+      {num > saldo && (
+        <div style={{ fontSize: 12, color: 'var(--negative)', marginTop: 5, fontWeight: 600 }}>
+          Valor maior que o saldo disponível.
+        </div>
+      )}
+
+      <label className="ev-label" style={{ marginTop: 14 }}>Descrição <span className="faint" style={{ textTransform:'none', fontWeight:500 }}>(opcional)</span></label>
+      <div className="field" style={{ marginTop: 6 }}>
+        <Ic.receipt size={16} style={{ color: 'var(--ink-faint)' }}/>
+        <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Ex.: CDB Nubank, Tesouro Selic…"/>
+      </div>
+
+      {/* Opção de já registrar no módulo de Investimentos */}
+      <button onClick={() => setLinkInv(v => !v)}
+        style={{ display:'flex', alignItems:'center', gap:8, border:'none', background:'none',
+          cursor:'pointer', fontFamily:'var(--font-ui)', fontSize:13.5, color:'var(--ink)', padding:'14px 0 0', marginTop:2 }}>
+        <div style={{ width:20, height:20, borderRadius:6, border:`2px solid ${linkInv ? 'var(--primary)' : 'var(--line-strong)'}`,
+          display:'grid', placeItems:'center', background: linkInv ? 'var(--primary)' : 'transparent' }}>
+          {linkInv && <Ic.check size={13} style={{ color:'#fff' }}/>}
+        </div>
+        Registrar também em Investimentos
+      </button>
+
+      {linkInv && (
+        <div style={{ marginTop: 12, padding: '14px', borderRadius: 14,
+          background: 'color-mix(in oklab, var(--primary) 6%, transparent)',
+          border: '1px solid color-mix(in oklab, var(--primary) 15%, transparent)',
+          display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label className="ev-label">Tipo de ativo</label>
+            <div className="cat-scroll" style={{ marginTop: 7 }}>
+              {tipos.map(t => (
+                <button key={t} onClick={() => setTipo(p => p === t ? '' : t)}
+                  style={{ padding:'5px 10px', borderRadius:999, cursor:'pointer',
+                    fontFamily:'var(--font-ui)', fontSize:12, fontWeight:600, transition:'all 0.15s',
+                    border:`1px solid ${tipo===t ? 'var(--primary)' : 'var(--line)'}`,
+                    background: tipo===t ? 'color-mix(in oklab, var(--primary) 14%, transparent)' : 'transparent',
+                    color: tipo===t ? 'var(--ink)' : 'var(--ink-soft)', whiteSpace:'nowrap' }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="ev-label">Instituição <span className="faint" style={{ textTransform:'none', fontWeight:500 }}>(opcional)</span></label>
+            <div className="field" style={{ marginTop: 6 }}>
+              <Ic.home size={16} style={{ color: 'var(--ink-faint)' }}/>
+              <input value={inst} onChange={e => setInst(e.target.value)} placeholder="Ex.: XP, Nubank, Rico…"/>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display:'flex', gap:10, marginTop:22 }}>
+        <button className="btn btn-ghost" onClick={onClose} style={{ flex:1, justifyContent:'center' }}>Cancelar</button>
+        <button className="btn" disabled={!valid} onClick={() => onSave(num, desc.trim(), linkInv ? tipo : '', linkInv ? inst.trim() : '')}
+          style={{ flex:2, justifyContent:'center', opacity: valid ? 1 : 0.5 }}>
+          <Ic.arrowUp size={15}/>Confirmar aporte
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
 // ── ModalShell — base reutilizável para todos os modais ───────────────────────
 function ModalShell({ title, children, onClose, onBack }) {
   return (
@@ -844,4 +980,4 @@ function ModalShell({ title, children, onClose, onBack }) {
   );
 }
 
-Object.assign(window, { Financeiro, Legend, TransactionModal, CustomCategoryModal, CardManagerModal, ModalShell });
+Object.assign(window, { Financeiro, Legend, TransactionModal, CustomCategoryModal, CardManagerModal, ModalShell, AllocateToInvestModal });
