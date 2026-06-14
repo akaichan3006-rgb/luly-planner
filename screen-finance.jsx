@@ -340,18 +340,16 @@ function Financeiro({ go }) {
               recorrente: false,
               tipo_lancamento: 'debito',
             });
-            if (tipo) {
-              const invStore = window.InvestmentStore;
-              if (invStore) invStore.add({
-                nome: desc || 'Aporte',
-                tipo,
-                instituicao: inst || '',
-                valor_inicial: valor,
-                valor_atual: valor,
-                data: new Date().toISOString().slice(0,10),
-              });
-            }
-            showToast('✓ Aporte registrado');
+            const invStore = window.InvestmentStore;
+            if (invStore) invStore.add({
+              nome: desc || tipo || 'Aporte',
+              tipo: tipo || 'Outro',
+              instituicao: inst || '',
+              valor_inicial: valor,
+              valor_atual: valor,
+              data: new Date().toISOString().slice(0,10),
+            });
+            showToast('✓ Aporte registrado em Financeiro e Investimentos');
             setAlloModal(false);
           }}
           onClose={() => setAlloModal(false)}
@@ -867,18 +865,18 @@ function CardEditForm({ card: initCard, isNew, onSave, onDelete, onBack }) {
 function AllocateToInvestModal({ saldo, onSave, onClose }) {
   const invStore = useInvestmentStore ? useInvestmentStore() : null;
   const tipos = invStore ? invStore.getTypes() : (window.INVEST_DEFAULT_TYPES || []);
-  const [val, setVal]   = useS('');
-  const [desc, setDesc] = useS('');
+  const [val,  setVal]  = useS('');
+  const [nome, setNome] = useS('');
   const [tipo, setTipo] = useS('');
   const [inst, setInst] = useS('');
-  const [linkInv, setLinkInv] = useS(false);
 
-  const num = parseFloat(val) || 0;
-  const valid = num > 0 && num <= saldo;
+  const num   = parseFloat(val) || 0;
+  const valid = num > 0 && num <= saldo && tipo !== '';
 
   return (
-    <ModalShell title="Alocar para investimentos" onClose={onClose}>
-      <div style={{ padding: '10px 14px', borderRadius: 12, marginBottom: 18,
+    <ModalShell title="Novo aporte" onClose={onClose}>
+      {/* Saldo disponível */}
+      <div style={{ padding: '10px 16px', borderRadius: 12, marginBottom: 20,
         background: 'color-mix(in oklab, var(--primary) 9%, transparent)',
         border: '1px solid color-mix(in oklab, var(--primary) 20%, transparent)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -886,69 +884,68 @@ function AllocateToInvestModal({ saldo, onSave, onClose }) {
         <span style={{ fontWeight: 800, fontSize: 16, color: 'var(--primary)' }}>{brl(saldo)}</span>
       </div>
 
-      <label className="ev-label">Valor a alocar (R$)</label>
+      {/* Valor */}
+      <label className="ev-label">Valor do aporte (R$)</label>
       <div className="field" style={{ marginTop: 6, padding: '10px 12px' }}>
         <Ic.arrowUp size={16} style={{ color: 'var(--primary)' }}/>
         <input autoFocus type="number" min="0.01" max={saldo} step="0.01"
           value={val} onChange={e => setVal(e.target.value)} placeholder="0,00"
-          style={{ flex:1, border:'none', background:'none', outline:'none', fontFamily:'var(--font-ui)', fontSize:14, color:'var(--ink)' }}/>
+          style={{ flex:1, border:'none', background:'none', outline:'none', fontFamily:'var(--font-ui)', fontSize:15, fontWeight:700, color:'var(--ink)' }}/>
       </div>
-      {num > saldo && (
+      {num > saldo && num > 0 && (
         <div style={{ fontSize: 12, color: 'var(--negative)', marginTop: 5, fontWeight: 600 }}>
           Valor maior que o saldo disponível.
         </div>
       )}
 
-      <label className="ev-label" style={{ marginTop: 14 }}>Descrição <span className="faint" style={{ textTransform:'none', fontWeight:500 }}>(opcional)</span></label>
+      {/* Nome / descrição */}
+      <label className="ev-label" style={{ marginTop: 14 }}>
+        Nome do investimento <span className="faint" style={{ textTransform:'none', fontWeight:500 }}>(opcional)</span>
+      </label>
       <div className="field" style={{ marginTop: 6 }}>
         <Ic.receipt size={16} style={{ color: 'var(--ink-faint)' }}/>
-        <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Ex.: CDB Nubank, Tesouro Selic…"/>
+        <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: CDB 13% a.a., Tesouro Selic 2029…"/>
       </div>
 
-      {/* Opção de já registrar no módulo de Investimentos */}
-      <button onClick={() => setLinkInv(v => !v)}
-        style={{ display:'flex', alignItems:'center', gap:8, border:'none', background:'none',
-          cursor:'pointer', fontFamily:'var(--font-ui)', fontSize:13.5, color:'var(--ink)', padding:'14px 0 0', marginTop:2 }}>
-        <div style={{ width:20, height:20, borderRadius:6, border:`2px solid ${linkInv ? 'var(--primary)' : 'var(--line-strong)'}`,
-          display:'grid', placeItems:'center', background: linkInv ? 'var(--primary)' : 'transparent' }}>
-          {linkInv && <Ic.check size={13} style={{ color:'#fff' }}/>}
-        </div>
-        Registrar também em Investimentos
-      </button>
+      {/* Tipo de ativo */}
+      <label className="ev-label" style={{ marginTop: 14 }}>Tipo de ativo <span style={{ color:'var(--negative)' }}>*</span></label>
+      <div className="cat-scroll" style={{ marginTop: 7 }}>
+        {tipos.map(t => (
+          <button key={t} onClick={() => setTipo(p => p === t ? '' : t)}
+            style={{ padding:'6px 12px', borderRadius:999, cursor:'pointer',
+              fontFamily:'var(--font-ui)', fontSize:12.5, fontWeight:600, transition:'all 0.15s', whiteSpace:'nowrap',
+              border:`1px solid ${tipo===t ? 'var(--primary)' : 'var(--line)'}`,
+              background: tipo===t ? 'color-mix(in oklab, var(--primary) 14%, transparent)' : 'transparent',
+              color: tipo===t ? 'var(--ink)' : 'var(--ink-soft)' }}>
+            {t}
+          </button>
+        ))}
+      </div>
 
-      {linkInv && (
-        <div style={{ marginTop: 12, padding: '14px', borderRadius: 14,
-          background: 'color-mix(in oklab, var(--primary) 6%, transparent)',
-          border: '1px solid color-mix(in oklab, var(--primary) 15%, transparent)',
-          display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <label className="ev-label">Tipo de ativo</label>
-            <div className="cat-scroll" style={{ marginTop: 7 }}>
-              {tipos.map(t => (
-                <button key={t} onClick={() => setTipo(p => p === t ? '' : t)}
-                  style={{ padding:'5px 10px', borderRadius:999, cursor:'pointer',
-                    fontFamily:'var(--font-ui)', fontSize:12, fontWeight:600, transition:'all 0.15s',
-                    border:`1px solid ${tipo===t ? 'var(--primary)' : 'var(--line)'}`,
-                    background: tipo===t ? 'color-mix(in oklab, var(--primary) 14%, transparent)' : 'transparent',
-                    color: tipo===t ? 'var(--ink)' : 'var(--ink-soft)', whiteSpace:'nowrap' }}>
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="ev-label">Instituição <span className="faint" style={{ textTransform:'none', fontWeight:500 }}>(opcional)</span></label>
-            <div className="field" style={{ marginTop: 6 }}>
-              <Ic.home size={16} style={{ color: 'var(--ink-faint)' }}/>
-              <input value={inst} onChange={e => setInst(e.target.value)} placeholder="Ex.: XP, Nubank, Rico…"/>
-            </div>
-          </div>
+      {/* Instituição */}
+      <label className="ev-label" style={{ marginTop: 14 }}>
+        Instituição <span className="faint" style={{ textTransform:'none', fontWeight:500 }}>(opcional)</span>
+      </label>
+      <div className="field" style={{ marginTop: 6 }}>
+        <Ic.home size={16} style={{ color: 'var(--ink-faint)' }}/>
+        <input value={inst} onChange={e => setInst(e.target.value)} placeholder="Ex.: XP, Nubank, Rico, BTG…"/>
+      </div>
+
+      {/* Resumo rápido */}
+      {valid && (
+        <div style={{ marginTop: 14, padding: '10px 14px', borderRadius: 12, fontSize: 13,
+          background: 'color-mix(in oklab, var(--positive) 9%, transparent)',
+          border: '1px solid color-mix(in oklab, var(--positive) 22%, transparent)',
+          display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ fontWeight: 700, color: 'var(--positive)' }}>Será registrado:</div>
+          <div className="faint">· Despesa de {brl(num)} com cat. "Investimentos" no histórico</div>
+          <div className="faint">· Novo investimento: {nome || tipo}{inst ? ` · ${inst}` : ''}</div>
         </div>
       )}
 
       <div style={{ display:'flex', gap:10, marginTop:22 }}>
         <button className="btn btn-ghost" onClick={onClose} style={{ flex:1, justifyContent:'center' }}>Cancelar</button>
-        <button className="btn" disabled={!valid} onClick={() => onSave(num, desc.trim(), linkInv ? tipo : '', linkInv ? inst.trim() : '')}
+        <button className="btn" disabled={!valid} onClick={() => onSave(num, (nome || tipo).trim(), tipo, inst.trim())}
           style={{ flex:2, justifyContent:'center', opacity: valid ? 1 : 0.5 }}>
           <Ic.arrowUp size={15}/>Confirmar aporte
         </button>
