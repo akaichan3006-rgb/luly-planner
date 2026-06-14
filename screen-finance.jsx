@@ -927,7 +927,7 @@ function AllocateToInvestModal({ saldo, onSave, onClose }) {
         Instituição <span className="faint" style={{ textTransform:'none', fontWeight:500 }}>(opcional)</span>
       </label>
       <div className="field" style={{ marginTop: 6 }}>
-        <Ic.home size={16} style={{ color: 'var(--ink-faint)' }}/>
+        <Ic.wallet size={16} style={{ color: 'var(--ink-faint)' }}/>
         <input value={inst} onChange={e => setInst(e.target.value)} placeholder="Ex.: XP, Nubank, Rico, BTG…"/>
       </div>
 
