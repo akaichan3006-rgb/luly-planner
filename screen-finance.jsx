@@ -863,8 +863,7 @@ function CardEditForm({ card: initCard, isNew, onSave, onDelete, onBack }) {
 
 // ── AllocateToInvestModal ─────────────────────────────────────────────────────
 function AllocateToInvestModal({ saldo, onSave, onClose }) {
-  const invStore = useInvestmentStore ? useInvestmentStore() : null;
-  const tipos = invStore ? invStore.getTypes() : (window.INVEST_DEFAULT_TYPES || []);
+  const tipos = (window.InvestmentStore && window.InvestmentStore.getTypes()) || window.INVEST_DEFAULT_TYPES || [];
   const [val,  setVal]  = useS('');
   const [nome, setNome] = useS('');
   const [tipo, setTipo] = useS('');

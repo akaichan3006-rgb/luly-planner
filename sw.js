@@ -1,7 +1,7 @@
 // Luly Planner — Service Worker
 // Cache-first for static assets, network-first for data
 
-const CACHE_NAME = 'luly-planner-v7';
+const CACHE_NAME = 'luly-planner-v8';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
