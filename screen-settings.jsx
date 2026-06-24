@@ -1,4 +1,136 @@
 // screen-settings.jsx — Configurações: perfil + tema (cards grandes) + preferências
+
+// ── Reset do Sistema ──────────────────────────────────────────────────────────
+function ResetModal({ onClose }) {
+  const [confirmText, setConfirmText] = useS('');
+  const [running, setRunning]         = useS(false);
+  const [done, setDone]               = useS(false);
+  const canReset = confirmText.trim().toUpperCase() === 'REINICIAR';
+
+  const doReset = async () => {
+    if (!canReset || running) return;
+    setRunning(true);
+    try {
+      // 1. Limpar localStorage (todas as chaves ps_*)
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('ps_')) keysToRemove.push(k);
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+
+      // 2. Limpar SessionStorage
+      sessionStorage.clear();
+
+      // 3. Limpar caches do PWA
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(n => caches.delete(n)));
+      }
+
+      // 4. Limpar IndexedDB
+      if ('indexedDB' in window) {
+        const dbs = await indexedDB.databases().catch(() => []);
+        await Promise.all(dbs.map(db => {
+          return new Promise(res => { const req = indexedDB.deleteDatabase(db.name); req.onsuccess = res; req.onerror = res; });
+        }));
+      }
+
+      // 5. Desregistrar Service Worker (força nova instalação limpa)
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+
+      setDone(true);
+      // Redirecionar após 1.5s
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err) {
+      console.error('[Reset] Erro:', err);
+      window.showToast && window.showToast('Erro ao reiniciar. Tente novamente.', 'error');
+      setRunning(false);
+    }
+  };
+
+  if (done) return (
+    <div style={{ position:'fixed', inset:0, zIndex:999, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(6px)',
+      display:'grid', placeItems:'center', padding:20 }}>
+      <div style={{ textAlign:'center', color:'#fff' }}>
+        <div style={{ fontSize:56, marginBottom:16 }}>✓</div>
+        <div style={{ fontWeight:800, fontSize:24, marginBottom:8 }}>Sistema reiniciado</div>
+        <div style={{ opacity:0.7, fontSize:14 }}>Recarregando…</div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:60, background:'rgba(40,10,10,0.5)',
+      backdropFilter:'blur(4px)', display:'grid', placeItems:'center', padding:20 }}>
+      <GlassCard onClick={e => e.stopPropagation()}
+        style={{ width:'100%', maxWidth:460, padding:28, border:'1px solid color-mix(in oklab,#e05 18%,transparent)' }}>
+
+        {/* Cabeçalho */}
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
+          <div style={{ width:44, height:44, borderRadius:14, background:'color-mix(in oklab,#e05 16%,transparent)',
+            display:'grid', placeItems:'center', flexShrink:0 }}>
+            <span style={{ fontSize:22 }}>⚠️</span>
+          </div>
+          <div style={{ flex:1 }}>
+            <h3 style={{ margin:0, fontSize:20, fontFamily:'var(--font-display)', fontWeight:700 }}>Reiniciar Sistema</h3>
+            <div className="faint" style={{ fontSize:12.5, marginTop:2 }}>Ação irreversível</div>
+          </div>
+          <button className="icon-btn" onClick={onClose}><Ic.plus size={18} style={{ transform:'rotate(45deg)' }}/></button>
+        </div>
+
+        {/* Aviso */}
+        <div style={{ padding:'12px 14px', borderRadius:12, marginBottom:20,
+          background:'color-mix(in oklab,#e05 9%,transparent)',
+          border:'1px solid color-mix(in oklab,#e05 22%,transparent)',
+          fontSize:13.5, lineHeight:1.6 }}>
+          Esta ação <strong>removerá permanentemente</strong> todos os dados cadastrados — finanças, investimentos, hábitos, metas, eventos, tarefas, cartões e configurações personalizadas.<br/>
+          <strong>Não poderá ser desfeita.</strong>
+        </div>
+
+        {/* Lista do que será apagado */}
+        <div style={{ fontSize:12.5, marginBottom:20, display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px 16px' }}>
+          {['Lançamentos financeiros','Investimentos','Hábitos e histórico','Metas e progresso',
+            'Eventos da agenda','Tarefas','Cartões e parcelas','Layout personalizado',
+            'Foto de perfil','Categorias customizadas','Tipos de ativo','Cache do PWA']
+            .map(item => (
+              <div key={item} className="faint" style={{ display:'flex', alignItems:'center', gap:5 }}>
+                <span style={{ color:'#e05', fontWeight:700 }}>×</span> {item}
+              </div>
+            ))}
+        </div>
+
+        {/* Confirmação */}
+        <label style={{ fontSize:13, fontWeight:700, display:'block', marginBottom:8, color:'var(--ink)' }}>
+          Para confirmar, digite <span style={{ color:'#e05', fontFamily:'monospace', letterSpacing:1 }}>REINICIAR</span>:
+        </label>
+        <div className="field" style={{ marginBottom:20, border:'1px solid color-mix(in oklab,#e05 30%,transparent)' }}>
+          <input autoFocus value={confirmText} onChange={e => setConfirmText(e.target.value)}
+            placeholder="REINICIAR" style={{ fontFamily:'monospace', letterSpacing:2, fontSize:15, fontWeight:700,
+              color: canReset ? '#e05' : 'var(--ink)' }}/>
+        </div>
+
+        <div style={{ display:'flex', gap:10 }}>
+          <button className="btn btn-ghost" onClick={onClose} style={{ flex:1, justifyContent:'center' }} disabled={running}>
+            Cancelar
+          </button>
+          <button onClick={doReset} disabled={!canReset || running}
+            style={{ flex:2, padding:'10px 16px', borderRadius:12, cursor: canReset ? 'pointer' : 'not-allowed',
+              fontFamily:'var(--font-ui)', fontWeight:700, fontSize:14, display:'flex', alignItems:'center',
+              justifyContent:'center', gap:8, border:'none', transition:'all 0.15s',
+              background: canReset ? '#c0392b' : 'color-mix(in oklab,#e05 18%,transparent)',
+              color: canReset ? '#fff' : 'color-mix(in oklab,#e05 50%,transparent)' }}>
+            {running ? '⟳ Reiniciando…' : '🔴 Reiniciar Sistema'}
+          </button>
+        </div>
+      </GlassCard>
+    </div>
+  );
+}
+
 function Settings({ theme, setTheme, userName, setUserName }) {
   const themes = window.THEMES || [];
   const [draft, setDraft] = useS(userName || '');
@@ -35,6 +167,8 @@ function Settings({ theme, setTheme, userName, setUserName }) {
     window.dispatchEvent(new Event('ps_avatar_changed'));
     window.showToast && window.showToast('Foto removida', 'info');
   };
+
+  const [resetModal, setResetModal] = useS(false);
 
   // cosmetic preferences (demo)
   const [prefs, setPrefs] = useS(() => {
@@ -136,6 +270,39 @@ function Settings({ theme, setTheme, userName, setUserName }) {
             </div>
           </GlassCard>
 
+          {/* ── Zona de Perigo ── */}
+          <GlassCard style={{ padding: 24, border: '1px solid color-mix(in oklab,#e05 18%,transparent)' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
+              <div style={{ flex:1, display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:18 }}>⚠️</span>
+                <span style={{ fontWeight:700, fontSize:16 }}>Zona de Perigo</span>
+              </div>
+            </div>
+            <div className="faint" style={{ fontSize:12.5, marginBottom:16, paddingLeft:26 }}>
+              Ações destrutivas e irreversíveis. Proceda com cuidado.
+            </div>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+              padding:'14px 16px', borderRadius:14,
+              background:'color-mix(in oklab,#e05 6%,transparent)',
+              border:'1px solid color-mix(in oklab,#e05 15%,transparent)' }}>
+              <div>
+                <div style={{ fontWeight:700, fontSize:14 }}>🔴 Reiniciar Sistema</div>
+                <div className="faint" style={{ fontSize:12, marginTop:2 }}>
+                  Apaga todos os dados e retorna ao estado de instalação inicial.
+                </div>
+              </div>
+              <button onClick={() => setResetModal(true)}
+                style={{ padding:'9px 16px', borderRadius:10, border:'1px solid #c0392b',
+                  background:'color-mix(in oklab,#e05 12%,transparent)', color:'#c0392b',
+                  fontFamily:'var(--font-ui)', fontWeight:700, fontSize:13, cursor:'pointer',
+                  transition:'all 0.15s', flexShrink:0, marginLeft:16 }}
+                onMouseEnter={e => { e.currentTarget.style.background='#c0392b'; e.currentTarget.style.color='#fff'; }}
+                onMouseLeave={e => { e.currentTarget.style.background='color-mix(in oklab,#e05 12%,transparent)'; e.currentTarget.style.color='#c0392b'; }}>
+                Reiniciar
+              </button>
+            </div>
+          </GlassCard>
+
           <GlassCard style={{ padding: 24 }}>
             <CardTitle icon="bell" title="Preferências" />
             <div style={{ display: 'flex', flexDirection: 'column', marginTop: 8 }}>
@@ -166,6 +333,7 @@ function Settings({ theme, setTheme, userName, setUserName }) {
           </GlassCard>
         </div>
       </div>
+      {resetModal && <ResetModal onClose={() => setResetModal(false)} />}
     </div>
   );
 }

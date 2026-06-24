@@ -257,12 +257,21 @@ const FinanceStore = (() => {
       const groupId = _uid('grp');
       const valorParcela = Math.round(((entry.valor || 0) / entry.parcelas) * 100) / 100;
       const novas = [];
+      // mes_inicio: YYYY-MM string; if provided, use as base for installment months
+      const mesBase = entry.mes_inicio
+        ? new Date(entry.mes_inicio + '-01T12:00')
+        : new Date();
+      const calcMes = (offset) => {
+        const d = new Date(mesBase);
+        d.setMonth(d.getMonth() + offset);
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      };
       for (let i = 0; i < entry.parcelas; i++) {
         novas.push({
           id: _uid('d'),
           ...entry,
           valor: valorParcela,
-          mes_ref: _mesRef(i),
+          mes_ref: calcMes(i),
           installment_group_id: groupId,
           installment_number: i + 1,
           total_installments: entry.parcelas,

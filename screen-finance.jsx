@@ -397,8 +397,10 @@ function TransactionModal({ modal, onSave, onDelete, onClose, catStore, cardStor
   const [step, setStep]   = useS(initStep); // 'fluxo' | 'saida_tipo' | 'form'
   const [fluxo, setFluxo] = useS(isEdit ? (entry._tipo === 'receita' ? 'entrada' : 'saida') : null);
   const [tipo, setTipo]   = useS(initTipo);
+  const hoje = new Date();
+  const mesAtualStr = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
   const [f, setF]         = useS(() => isEdit ? { ...entry, parcelas: entry.total_installments || 2 } : {
-    desc: '', cat: '', valor: '', dia: new Date().getDate(), recorrente: false, card_id: '', parcelas: 2,
+    desc: '', cat: '', valor: '', dia: new Date().getDate(), recorrente: false, card_id: '', parcelas: 2, mes_inicio: mesAtualStr,
   });
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
 
@@ -607,6 +609,30 @@ function TransactionModal({ modal, onSave, onDelete, onClose, catStore, cardStor
                 </button>
               );
             })}
+          </div>
+          {/* Mês de início */}
+          <div style={{ marginTop: 12 }}>
+            <label className="ev-label">Primeira parcela cai em</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 7 }}>
+              {Array.from({ length: 12 }, (_, i) => {
+                const d = new Date(); d.setMonth(d.getMonth() + i);
+                const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+                const mon = d.toLocaleString('pt-BR', { month: 'short' }).replace('.','');
+                const yr  = String(d.getFullYear()).slice(2);
+                const label = `${mon}/${yr}`;
+                const on = f.mes_inicio === val;
+                return (
+                  <button key={val} onClick={() => set('mes_inicio', val)}
+                    style={{ padding: '5px 11px', borderRadius: 999, cursor: 'pointer',
+                      fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 600, transition: 'all 0.15s',
+                      border: `1px solid ${on ? 'var(--warn)' : 'var(--line)'}`,
+                      background: on ? 'color-mix(in oklab, var(--warn) 14%, transparent)' : 'transparent',
+                      color: on ? 'var(--warn)' : 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           {valorParcela > 0 && (
             <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 12,
