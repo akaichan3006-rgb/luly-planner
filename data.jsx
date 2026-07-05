@@ -174,14 +174,27 @@ const FinanceStore = (() => {
 
   const getReceitas  = () => state.receitas;
   const getDespesas  = () => state.despesas;
-  const getSaldo     = () => state.receitas.reduce((s,r) => s+(r.valor||0), 0) - state.despesas.reduce((s,d) => s+(d.valor||0), 0);
+
+  // Crédito só sai do saldo quando está pago (status === 'pago').
+  // Pix/Débito/Dinheiro/etc. saem imediatamente (sem status pendente).
+  const _contaNoSaldo = (d) => {
+    const fp = d.forma_pagamento || d.tipo_lancamento || '';
+    const isCredito = fp === 'credito' || fp === 'credito_parcelado';
+    if (!isCredito) return true;
+    return d.status === 'pago';
+  };
+
+  const getSaldo = () =>
+    state.receitas.reduce((s,r) => s+(r.valor||0), 0)
+    - state.despesas.filter(_contaNoSaldo).reduce((s,d) => s+(d.valor||0), 0);
+
   const getEntradasMes = () => receitasMes().reduce((s,r) => s+(r.valor||0), 0);
-  const getSaidasMes   = () => despesasMes().reduce((s,d) => s+(d.valor||0), 0);
+  const getSaidasMes   = () => despesasMes().filter(_contaNoSaldo).reduce((s,d) => s+(d.valor||0), 0);
   const getEconomiaMes = () => getEntradasMes() - getSaidasMes();
 
   const getCategorias = () => {
     const map = {};
-    despesasMes().forEach(d => {
+    despesasMes().filter(_contaNoSaldo).forEach(d => {
       const cat = d.cat || 'Outros';
       map[cat] = (map[cat] || 0) + (d.valor || 0);
     });
