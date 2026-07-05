@@ -1,7 +1,7 @@
 // Luly Planner — Service Worker
 // Cache-first for static assets, network-first for data
 
-const CACHE_NAME = 'luly-planner-v10';
+const CACHE_NAME = 'luly-planner-v11';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -15,6 +15,7 @@ const STATIC_ASSETS = [
   '/screen-login.jsx',
   '/screen-dashboard.jsx',
   '/screen-finance.jsx',
+  '/screen-contas.jsx',
   '/screen-agenda.jsx',
   '/screen-tasks.jsx',
   '/screen-goals.jsx',

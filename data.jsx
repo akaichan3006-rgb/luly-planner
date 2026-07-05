@@ -649,6 +649,89 @@ const InvestmentStore = (() => {
 })();
 window.InvestmentStore = InvestmentStore;
 
+// ─── ContasProgramadasStore ───────────────────────────────────────────────────
+// Scheduled/recurring bills. Each entry has: id, desc, valor, dia, categoria,
+// recorrente, ativa. Payment history stored per month in historico[mes_ref].
+const ContasProgramadasStore = (() => {
+  const KEY = 'ps_contas_prog';
+  const listeners = new Set();
+  const emit = () => listeners.forEach(fn => fn());
+  const persist = (d) => { localStorage.setItem(KEY, JSON.stringify(d)); emit(); };
+  const load = () => _load(KEY, []);
+
+  const getAll    = ()      => load();
+  const getAtivas = ()      => load().filter(c => c.ativa !== false);
+
+  // Returns bills for a given mes_ref ('YYYY-MM'), with their payment status for that month
+  const getForMes = (mesRef) => {
+    const all = load();
+    const hoje = new Date().toISOString().slice(0,10);
+    return all.filter(c => {
+      if (c.ativa === false) return false;
+      // Recurring: always show
+      if (c.recorrente) return true;
+      // One-time: show only if its mes_ref matches
+      return (c.mes_ref || mesRef) === mesRef;
+    }).map(c => {
+      const status = (c.historico || {})[mesRef] || 'pendente';
+      const yr = parseInt(mesRef.slice(0,4));
+      const mo = parseInt(mesRef.slice(5,7));
+      const vencDate = `${yr}-${String(mo).padStart(2,'0')}-${String(c.dia||1).padStart(2,'0')}`;
+      const atrasado = vencDate < hoje && status !== 'pago';
+      return { ...c, status: atrasado ? 'atrasado' : status, vencDate };
+    });
+  };
+
+  const getPendentes = () => {
+    const mes = _mesAtual();
+    return getForMes(mes).filter(c => c.status !== 'pago');
+  };
+
+  const add = (conta) => {
+    const all = load();
+    all.push({ id: _uid('cp'), ativa: true, recorrente: true, historico: {}, ...conta, created_at: new Date().toISOString() });
+    persist(all);
+  };
+
+  const update = (id, patch) => {
+    const all = load().map(c => c.id === id ? { ...c, ...patch } : c);
+    persist(all);
+  };
+
+  const remove = (id) => persist(load().filter(c => c.id !== id));
+
+  const marcarPago = (id, mesRef) => {
+    const mes = mesRef || _mesAtual();
+    const all = load().map(c => {
+      if (c.id !== id) return c;
+      return { ...c, historico: { ...(c.historico||{}), [mes]: 'pago' } };
+    });
+    persist(all);
+  };
+
+  const marcarPendente = (id, mesRef) => {
+    const mes = mesRef || _mesAtual();
+    const all = load().map(c => {
+      if (c.id !== id) return c;
+      const h = { ...(c.historico||{}) };
+      delete h[mes];
+      return { ...c, historico: h };
+    });
+    persist(all);
+  };
+
+  return { getAll, getAtivas, getForMes, getPendentes, add, update, remove, marcarPago, marcarPendente,
+    subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); } };
+})();
+window.ContasProgramadasStore = ContasProgramadasStore;
+
+function useContasProgramadasStore() {
+  const [, force] = React.useState(0);
+  React.useEffect(() => ContasProgramadasStore.subscribe(() => force(n => n + 1)), []);
+  return ContasProgramadasStore;
+}
+window.useContasProgramadasStore = useContasProgramadasStore;
+
 function useInvestmentStore() {
   const [, force] = React.useState(0);
   React.useEffect(() => InvestmentStore.subscribe(() => force(n => n + 1)), []);

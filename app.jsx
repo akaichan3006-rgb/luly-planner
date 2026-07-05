@@ -4,6 +4,7 @@ const { useState: useS, useEffect: useE, useRef: useR } = React;
 const NAV = [
   { id: 'dashboard',     label: 'Dashboard',      icon: 'grid' },
   { id: 'financeiro',    label: 'Financeiro',      icon: 'wallet' },
+  { id: 'contas',        label: 'Contas',          icon: 'receipt' },
   { id: 'investimentos', label: 'Investimentos',   icon: 'arrowUp' },
   { id: 'agenda',        label: 'Agenda',          icon: 'calMonth' },
   { id: 'tarefas',       label: 'Tarefas',         icon: 'kanban' },
@@ -242,7 +243,7 @@ function App() {
 
   const go = (s) => { setScreen(s); setDrawerOpen(false); };
   const Screen = {
-    dashboard: Dashboard, financeiro: Financeiro, investimentos: Investimentos,
+    dashboard: Dashboard, financeiro: Financeiro, contas: ContasProgramadas, investimentos: Investimentos,
     agenda: Agenda, tarefas: Tarefas, metas: Metas, habitos: Habitos,
     integracoes: Integrations, config: Settings,
   }[screen] || Dashboard;
