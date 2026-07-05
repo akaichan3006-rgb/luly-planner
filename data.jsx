@@ -100,15 +100,33 @@ window.useCustomCategoryStore = useCustomCategoryStore;
 
 // ─── CardStore ───────────────────────────────────────────────────────────────
 // Up to N credit/debit cards per user
+// ─── Fatura Calculator (shared helper) ───────────────────────────────────────
+// Given a card and a purchase date (YYYY-MM-DD), returns { faturaRef: 'YYYY-MM', vencDate: 'YYYY-MM-DD' }
+function calcFaturaFromCard(card, dataCompra) {
+  const dc = dataCompra ? new Date(dataCompra + 'T12:00') : new Date();
+  const dayCompra     = dc.getDate();
+  const fechamento    = card.dia_fechamento  || 1;
+  const vencimento    = card.dia_vencimento  || 10;
+  // purchases AFTER the closing date go to next month's bill
+  let yr = dc.getFullYear(), mo = dc.getMonth() + 1;
+  if (dayCompra > fechamento) {
+    mo += 1; if (mo > 12) { mo = 1; yr += 1; }
+  }
+  const faturaRef = `${yr}-${String(mo).padStart(2,'0')}`;
+  const vencDate  = `${yr}-${String(mo).padStart(2,'0')}-${String(vencimento).padStart(2,'0')}`;
+  return { faturaRef, vencDate };
+}
+window.calcFaturaFromCard = calcFaturaFromCard;
+
 const CardStore = (() => {
   const KEY = 'ps_cards';
   const listeners = new Set();
   const emit = () => listeners.forEach(l => l());
 
   const DEFAULT_CARDS = [
-    { id: 'card_1', name: 'Cartão 1', brand: 'Visa',       color: '#9E4A69', limit: 0, created_at: new Date().toISOString() },
-    { id: 'card_2', name: 'Cartão 2', brand: 'Mastercard', color: '#7c93c4', limit: 0, created_at: new Date().toISOString() },
-    { id: 'card_3', name: 'Cartão 3', brand: 'Elo',        color: '#4f9d7e', limit: 0, created_at: new Date().toISOString() },
+    { id: 'card_1', name: 'Cartão 1', brand: 'Visa',       color: '#9E4A69', limit: 0, dia_fechamento: 1,  dia_vencimento: 10, created_at: new Date().toISOString() },
+    { id: 'card_2', name: 'Cartão 2', brand: 'Mastercard', color: '#7c93c4', limit: 0, dia_fechamento: 15, dia_vencimento: 25, created_at: new Date().toISOString() },
+    { id: 'card_3', name: 'Cartão 3', brand: 'Elo',        color: '#4f9d7e', limit: 0, dia_fechamento: 10, dia_vencimento: 20, created_at: new Date().toISOString() },
   ];
 
   let state = _load(KEY, null) || DEFAULT_CARDS;
@@ -251,27 +269,44 @@ const FinanceStore = (() => {
     }).sort((a, b) => (a.parcelas[0]?.mes_ref||'').localeCompare(b.parcelas[0]?.mes_ref||''));
   };
 
-  // ADD — handles regular and installment entries
+  // ── Fatura helpers ──
+  // For credit: auto-calculate vencimento date per installment
+  const _creditoVenc = (card, dataCompra, parcelaOffset) => {
+    const { faturaRef, vencDate } = calcFaturaFromCard(card, dataCompra);
+    if (parcelaOffset === 0) return { faturaRef, vencDate };
+    const base = new Date(faturaRef + '-01T12:00');
+    base.setMonth(base.getMonth() + parcelaOffset);
+    const yr = base.getFullYear(), mo = base.getMonth() + 1;
+    const vd = card.dia_vencimento || 10;
+    return {
+      faturaRef: `${yr}-${String(mo).padStart(2,'0')}`,
+      vencDate:  `${yr}-${String(mo).padStart(2,'0')}-${String(vd).padStart(2,'0')}`,
+    };
+  };
+
+  // ADD — handles regular, credit-single, and credit-installment entries
   const add = (tipo, entry) => {
-    if (entry.tipo_lancamento === 'credito_parcelado' && entry.parcelas >= 2) {
+    const isCredito = entry.forma_pagamento === 'credito';
+    const isParcelado = isCredito && entry.parcelas >= 2;
+    const card = entry.card_id ? CardStore.getById(entry.card_id) : null;
+
+    if (isParcelado && card) {
+      // Credit installments with auto-calculated vencimento dates
       const groupId = _uid('grp');
       const valorParcela = Math.round(((entry.valor || 0) / entry.parcelas) * 100) / 100;
       const novas = [];
-      // mes_inicio: YYYY-MM string; if provided, use as base for installment months
-      const mesBase = entry.mes_inicio
-        ? new Date(entry.mes_inicio + '-01T12:00')
-        : new Date();
-      const calcMes = (offset) => {
-        const d = new Date(mesBase);
-        d.setMonth(d.getMonth() + offset);
-        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-      };
       for (let i = 0; i < entry.parcelas; i++) {
+        const { faturaRef, vencDate } = _creditoVenc(card, entry.data_compra, i);
+        const vencDay = parseInt(vencDate.slice(8, 10)) || (card.dia_vencimento || 10);
         novas.push({
           id: _uid('d'),
           ...entry,
           valor: valorParcela,
-          mes_ref: calcMes(i),
+          mes_ref: faturaRef,
+          fatura_mes: faturaRef,
+          data_vencimento: vencDate,
+          dia: vencDay,
+          status: 'pendente',
           installment_group_id: groupId,
           installment_number: i + 1,
           total_installments: entry.parcelas,
@@ -282,16 +317,86 @@ const FinanceStore = (() => {
       persist();
       return novas;
     }
+
+    // Backward-compat: old-style credito_parcelado without forma_pagamento
+    if (entry.tipo_lancamento === 'credito_parcelado' && entry.parcelas >= 2 && !isCredito) {
+      const groupId = _uid('grp');
+      const valorParcela = Math.round(((entry.valor || 0) / entry.parcelas) * 100) / 100;
+      const novas = [];
+      const mesBase = entry.mes_inicio ? new Date(entry.mes_inicio + '-01T12:00') : new Date();
+      const calcMes = (offset) => {
+        const d = new Date(mesBase); d.setMonth(d.getMonth() + offset);
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      };
+      for (let i = 0; i < entry.parcelas; i++) {
+        novas.push({ id: _uid('d'), ...entry, valor: valorParcela, mes_ref: calcMes(i),
+          installment_group_id: groupId, installment_number: i + 1,
+          total_installments: entry.parcelas, created_at: new Date().toISOString() });
+      }
+      state = { ...state, despesas: [...state.despesas, ...novas] };
+      persist(); return novas;
+    }
+
+    // Single entry (credit or other)
+    let mesRef = _mesAtual();
+    let diaRef = entry.dia || new Date().getDate();
+    let faturaFields = {};
+    if (isCredito && card) {
+      const { faturaRef, vencDate } = calcFaturaFromCard(card, entry.data_compra);
+      mesRef = faturaRef;
+      diaRef = parseInt(vencDate.slice(8,10)) || diaRef;
+      faturaFields = { fatura_mes: faturaRef, data_vencimento: vencDate, status: 'pendente' };
+    }
     const rec = {
       id: _uid(tipo[0]),
-      mes_ref: _mesAtual(),
+      mes_ref: mesRef,
+      dia: diaRef,
       created_at: new Date().toISOString(),
+      status: tipo === 'receita' ? 'recebido' : (entry.forma_pagamento ? 'pendente' : 'pago'),
       ...entry,
+      ...faturaFields,
     };
     if (tipo === 'receita') state = { ...state, receitas: [...state.receitas, rec] };
     else                    state = { ...state, despesas: [...state.despesas, rec] };
     persist();
     return rec;
+  };
+
+  // Mark a despesa as paid
+  const marcarPago = (id) => {
+    state = { ...state, despesas: state.despesas.map(d =>
+      d.id === id ? { ...d, status: 'pago', data_pagamento: new Date().toISOString().slice(0,10) } : d
+    )};
+    persist();
+  };
+  const marcarPendente = (id) => {
+    state = { ...state, despesas: state.despesas.map(d =>
+      d.id === id ? { ...d, status: 'pendente', data_pagamento: null } : d
+    )};
+    persist();
+  };
+
+  // Contas pendentes (com data_vencimento definida)
+  const getContasPendentes = () => {
+    const hoje = new Date().toISOString().slice(0,10);
+    return state.despesas
+      .filter(d => d.data_vencimento && (d.status === 'pendente' || d.status === 'atrasado'))
+      .map(d => ({
+        ...d,
+        status: (d.status === 'pendente' && d.data_vencimento < hoje) ? 'atrasado' : d.status,
+      }))
+      .sort((a, b) => (a.data_vencimento||'').localeCompare(b.data_vencimento||''));
+  };
+
+  const getProximosPagamentos = () => {
+    const hoje = new Date().toISOString().slice(0,10);
+    const limite = new Date(); limite.setDate(limite.getDate() + 30);
+    const limiteStr = limite.toISOString().slice(0,10);
+    return state.despesas
+      .filter(d => d.data_vencimento && d.data_vencimento >= hoje && d.data_vencimento <= limiteStr
+        && (d.status === 'pendente' || d.status === 'atrasado'))
+      .sort((a, b) => a.data_vencimento.localeCompare(b.data_vencimento))
+      .slice(0, 8);
   };
 
   const update = (tipo, id, patch) => {
@@ -317,6 +422,7 @@ const FinanceStore = (() => {
     getReceitas, getDespesas, getSaldo, getEntradasMes, getSaidasMes,
     getEconomiaMes, getCategorias, getContasVencer, getEvolucao,
     getGastosPorCartao, getParcelasFuturas,
+    getContasPendentes, getProximosPagamentos, marcarPago, marcarPendente,
     add, update, remove,
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
   };

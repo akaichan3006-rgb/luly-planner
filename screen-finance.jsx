@@ -1,10 +1,11 @@
 // screen-finance.jsx — Financeiro com categorias customizadas, cartões e parcelamento
 const FINANCE_WIDGETS = [
-  { id: 'investimentos', label: 'Atalho Investimentos' },
-  { id: 'stats',         label: 'Cards de saldo' },
-  { id: 'evolucao',      label: 'Evolução + Gastos por categoria' },
-  { id: 'ranking',       label: 'Ranking + Histórico' },
-  { id: 'cartoes',       label: 'Cartões e parcelas' },
+  { id: 'investimentos',  label: 'Atalho Investimentos' },
+  { id: 'stats',          label: 'Cards de saldo' },
+  { id: 'contas_pagar',   label: 'Contas a Pagar' },
+  { id: 'evolucao',       label: 'Evolução + Gastos por categoria' },
+  { id: 'ranking',        label: 'Ranking + Histórico' },
+  { id: 'cartoes',        label: 'Cartões e parcelas' },
 ];
 
 function InvBanner({ go }) {
@@ -145,6 +146,55 @@ function Financeiro({ go }) {
             <StatCard icon="leaf"      label="Economia do mês" value={brl(store.getEconomiaMes())} color="var(--accent)" />
           </div>
         );
+
+        if (w.id === 'contas_pagar') {
+          const pendentes = store.getContasPendentes ? store.getContasPendentes() : [];
+          const hoje = new Date().toISOString().slice(0,10);
+          const statusColor = (s) => s === 'pago' ? 'var(--positive)' : s === 'atrasado' ? 'var(--negative)' : 'var(--warn)';
+          const statusLabel = (s) => s === 'pago' ? 'Pago' : s === 'atrasado' ? 'Atrasado' : 'Pendente';
+          return wrap(
+            <GlassCard style={{ padding:22 }}>
+              <CardTitle icon="clock" title="Contas a Pagar" />
+              {pendentes.length === 0 ? (
+                <div className="faint" style={{ textAlign:'center', padding:'24px 0', fontSize:13 }}>Nenhuma conta pendente</div>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:10, marginTop:14 }}>
+                  {pendentes.slice(0,8).map(item => {
+                    const venc = item.data_vencimento || '';
+                    const atrasado = venc && venc < hoje && item.status !== 'pago';
+                    const status = item.status || (atrasado ? 'atrasado' : 'pendente');
+                    const cor = statusColor(status);
+                    return (
+                      <div key={item.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderRadius:12,
+                        background:'color-mix(in oklab, var(--glass-bg) 60%, transparent)',
+                        border:'1px solid var(--line)' }}>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontWeight:700, fontSize:14, color:'var(--ink)' }}>{item.desc || item.cat}</div>
+                          <div className="faint" style={{ fontSize:12, marginTop:2 }}>
+                            {item.cat}{venc ? ` · Vence ${new Date(venc+'T12:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}` : ''}
+                            {item.card_name ? ` · ${item.card_name}` : ''}
+                          </div>
+                        </div>
+                        <div style={{ textAlign:'right' }}>
+                          <div style={{ fontWeight:800, fontSize:14, color:'var(--ink)' }}>{brl(item.valor)}</div>
+                          <div style={{ fontSize:11, fontWeight:700, color:cor, marginTop:2 }}>{statusLabel(status)}</div>
+                        </div>
+                        {status !== 'pago' && store.marcarPago && (
+                          <button onClick={() => { store.marcarPago(item.id); }}
+                            style={{ padding:'6px 12px', borderRadius:999, cursor:'pointer', fontFamily:'var(--font-ui)',
+                              fontSize:12, fontWeight:700, border:'1px solid var(--positive)',
+                              background:'color-mix(in oklab,var(--positive) 10%,transparent)', color:'var(--positive)' }}>
+                            <Ic.check size={13}/>Pagar
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </GlassCard>
+          );
+        }
 
         if (w.id === 'evolucao') return wrap(
           <div style={{ display: 'grid', gridTemplateColumns: '1.45fr 1fr', gap: 16 }}>
@@ -369,192 +419,140 @@ function Legend({ color, label }) {
 }
 
 // ── TransactionModal ──────────────────────────────────────────────────────────
-const SAIDA_OPTIONS = [
-  { id: 'debito',            label: 'Débito',           sub: 'Pagamento à vista',    icon: 'arrowUp',  color: 'var(--negative)' },
-  { id: 'credito',           label: 'Crédito',          sub: 'Cartão de crédito',    icon: 'wallet',   color: '#7c93c4' },
-  { id: 'credito_parcelado', label: 'Parcelado',        sub: 'Compra parcelada',     icon: 'receipt',  color: 'var(--warn)' },
+const FORMA_PAGAMENTO = [
+  { id: 'pix',           label: 'Pix',           icon: 'sync',      color: '#4f9d7e' },
+  { id: 'dinheiro',      label: 'Dinheiro',      icon: 'leaf',      color: '#6abfa0' },
+  { id: 'debito',        label: 'Débito',        icon: 'wallet',    color: 'var(--negative)' },
+  { id: 'credito',       label: 'Crédito',       icon: 'receipt',   color: '#7c93c4' },
+  { id: 'boleto',        label: 'Boleto',        icon: 'receipt',   color: 'var(--warn)' },
+  { id: 'transferencia', label: 'Transferência', icon: 'arrowUp',   color: '#caa7d0' },
+  { id: 'outro',         label: 'Outro',         icon: 'dots',      color: '#97798a' },
 ];
 const RECEITA_CATS = ['Salário','Freelance','Comissão','Rendimentos','Dividendos','Aluguel recebido','Outros'];
+const PARCELAS_OPTS = [1,2,3,4,5,6,7,8,9,10,12,15,18,24];
 
 function TransactionModal({ modal, onSave, onDelete, onClose, catStore, cardStore, onNewCat }) {
   const isEdit = modal.mode === 'edit';
   const entry  = modal.entry;
 
-  // Determine initial tipo_lancamento from existing entry
-  const initTipo = () => {
-    if (!isEdit) return null;
-    if (entry._tipo === 'receita') return 'entrada';
-    if (entry.installment_group_id) return 'credito_parcelado';
-    return 'debito';
-  };
+  const todayStr = new Date().toISOString().slice(0,10);
+  const initFluxo = isEdit ? (entry._tipo === 'receita' ? 'entrada' : 'saida') : null;
+  const initForma = isEdit ? (entry.forma_pagamento || (entry.installment_group_id ? 'credito' : 'debito')) : '';
 
-  // step: 'fluxo' → 'saida_tipo' → 'form'
-  const initStep = () => {
-    if (isEdit) return 'form';
-    return 'fluxo';
-  };
-
-  const [step, setStep]   = useS(initStep); // 'fluxo' | 'saida_tipo' | 'form'
-  const [fluxo, setFluxo] = useS(isEdit ? (entry._tipo === 'receita' ? 'entrada' : 'saida') : null);
-  const [tipo, setTipo]   = useS(initTipo);
-  const hoje = new Date();
-  const mesAtualStr = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
-  const [f, setF]         = useS(() => isEdit ? { ...entry, parcelas: entry.total_installments || 2 } : {
-    desc: '', cat: '', valor: '', dia: new Date().getDate(), recorrente: false, card_id: '', parcelas: 2, mes_inicio: mesAtualStr,
-  });
+  const [step, setStep]   = useS(isEdit ? 'form' : 'fluxo');
+  const [fluxo, setFluxo] = useS(initFluxo);
+  const [f, setF] = useS(() => isEdit
+    ? { ...entry, parcelas: entry.total_installments || 2, data_compra: entry.data_compra || todayStr }
+    : { desc:'', cat:'', valor:'', data_compra: todayStr, forma_pagamento:'', card_id:'', parcelas:1, recorrente:false, data_vencimento:'' }
+  );
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
 
-  const isReceita = fluxo === 'entrada';
-  const isParcelado = tipo === 'credito_parcelado';
+  const isReceita  = fluxo === 'entrada';
+  const isCredito  = f.forma_pagamento === 'credito';
+  const isParcelado = isCredito && parseInt(f.parcelas) >= 2;
 
   // Category lists
-  const customCats   = catStore ? catStore.getAll() : [];
+  const customCats    = catStore ? catStore.getAll() : [];
   const customReceita = customCats.filter(c => c.tipo === 'receita' || c.tipo === 'ambos').map(c => c.name);
   const customDespesa = customCats.filter(c => c.tipo === 'despesa' || c.tipo === 'ambos').map(c => c.name);
   const receitaCats   = [...RECEITA_CATS, ...customReceita];
   const despesaCats   = [...CAT_FINANCE,  ...customDespesa];
   const cats = isReceita ? receitaCats : despesaCats;
 
-  // Auto-select first category when switching fluxo/tipo
-  useE(() => {
-    if (fluxo && !isEdit) set('cat', isReceita ? receitaCats[0] : despesaCats[0]);
-  }, [fluxo, tipo]);
+  useE(() => { if (fluxo && !isEdit) set('cat', isReceita ? receitaCats[0] : despesaCats[0]); }, [fluxo]);
 
   const cards = cardStore ? cardStore.getAll() : [];
+  const selectedCard = cards.find(c => c.id === f.card_id) || null;
 
-  const valid = (f.desc||'').trim() && parseFloat(f.valor) > 0 && f.cat &&
-    (!isParcelado || (parseInt(f.parcelas) >= 2));
+  // Auto-calculate fatura when credito + card + data_compra
+  const faturaPreview = isCredito && selectedCard && f.data_compra
+    ? (window.calcFaturaFromCard ? window.calcFaturaFromCard(selectedCard, f.data_compra) : null)
+    : null;
+
+  const valorParcela = isParcelado && parseFloat(f.valor) > 0
+    ? parseFloat(f.valor) / parseInt(f.parcelas) : 0;
+
+  const valid = (f.desc||'').trim() && parseFloat(f.valor) > 0 && f.cat
+    && (isReceita || f.forma_pagamento)
+    && (!isCredito || f.card_id);
 
   const handleSave = () => {
     const data = {
       ...f,
-      valor: parseFloat(f.valor),
-      dia:   parseInt(f.dia) || 1,
-      tipo_lancamento: tipo,
+      valor:    parseFloat(f.valor),
+      dia:      f.data_compra ? parseInt(f.data_compra.slice(8,10)) : new Date().getDate(),
       parcelas: isParcelado ? parseInt(f.parcelas) : undefined,
+      tipo_lancamento: isParcelado ? 'credito_parcelado' : (isCredito ? 'credito' : (f.forma_pagamento || 'debito')),
     };
-    onSave(data, fluxo === 'entrada' ? 'receita' : 'despesa');
+    onSave(data, isReceita ? 'receita' : 'despesa');
   };
 
-  const valorParcela = isParcelado && parseFloat(f.valor) > 0 && parseInt(f.parcelas) >= 2
-    ? parseFloat(f.valor) / parseInt(f.parcelas)
-    : 0;
-
   // ── Step 1: Entrada ou Saída ─────────────────────────────────────────────
-  if (step === 'fluxo') {
-    return (
-      <ModalShell title="Novo lançamento" onClose={onClose}>
-        <p className="faint" style={{ fontSize: 13, margin: '0 0 20px', textAlign: 'center' }}>
-          O dinheiro está entrando ou saindo?
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          {/* Entrada */}
-          <button onClick={() => { setFluxo('entrada'); setTipo('entrada'); setStep('form'); }}
-            style={{ padding: '28px 16px', borderRadius: 18, border: '2px solid var(--line)',
-              background: 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column',
-              alignItems: 'center', gap: 12, transition: 'all 0.18s var(--ease)', fontFamily: 'var(--font-ui)' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--positive)'; e.currentTarget.style.background = 'color-mix(in oklab, var(--positive) 8%, transparent)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'transparent'; }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'color-mix(in oklab, var(--positive) 14%, transparent)',
-              display: 'grid', placeItems: 'center' }}>
-              <Ic.arrowDown size={28} style={{ color: 'var(--positive)' }}/>
+  if (step === 'fluxo') return (
+    <ModalShell title="Novo lançamento" onClose={onClose}>
+      <p className="faint" style={{ fontSize: 13, margin: '0 0 20px', textAlign: 'center' }}>
+        O dinheiro está entrando ou saindo?
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        {[
+          { key:'entrada', label:'Entrada', sub:'Salário, freelance, rendimentos…', icon:'arrowDown', color:'var(--positive)' },
+          { key:'saida',   label:'Saída',   sub:'Compras, contas, despesas…',       icon:'arrowUp',  color:'var(--negative)' },
+        ].map(opt => (
+          <button key={opt.key} onClick={() => { setFluxo(opt.key); setStep('form'); }}
+            style={{ padding:'28px 16px', borderRadius:18, border:'2px solid var(--line)',
+              background:'transparent', cursor:'pointer', display:'flex', flexDirection:'column',
+              alignItems:'center', gap:12, transition:'all 0.18s var(--ease)', fontFamily:'var(--font-ui)' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor=opt.color; e.currentTarget.style.background=`color-mix(in oklab,${opt.color} 8%,transparent)`; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor='var(--line)'; e.currentTarget.style.background='transparent'; }}>
+            <div style={{ width:56, height:56, borderRadius:'50%', background:`color-mix(in oklab,${opt.color} 14%,transparent)`, display:'grid', placeItems:'center' }}>
+              {Ic[opt.icon]({ size:28, style:{color:opt.color} })}
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 17, color: 'var(--ink)', marginBottom: 4 }}>Entrada</div>
-              <div className="faint" style={{ fontSize: 12.5, textAlign: 'center' }}>Salário, freelance, rendimentos…</div>
+              <div style={{ fontWeight:800, fontSize:17, color:'var(--ink)', marginBottom:4 }}>{opt.label}</div>
+              <div className="faint" style={{ fontSize:12.5, textAlign:'center' }}>{opt.sub}</div>
             </div>
           </button>
-          {/* Saída */}
-          <button onClick={() => { setFluxo('saida'); setStep('saida_tipo'); }}
-            style={{ padding: '28px 16px', borderRadius: 18, border: '2px solid var(--line)',
-              background: 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column',
-              alignItems: 'center', gap: 12, transition: 'all 0.18s var(--ease)', fontFamily: 'var(--font-ui)' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--negative)'; e.currentTarget.style.background = 'color-mix(in oklab, var(--negative) 8%, transparent)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'transparent'; }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'color-mix(in oklab, var(--negative) 14%, transparent)',
-              display: 'grid', placeItems: 'center' }}>
-              <Ic.arrowUp size={28} style={{ color: 'var(--negative)' }}/>
-            </div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 17, color: 'var(--ink)', marginBottom: 4 }}>Saída</div>
-              <div className="faint" style={{ fontSize: 12.5, textAlign: 'center' }}>Compras, contas, despesas…</div>
-            </div>
-          </button>
-        </div>
-      </ModalShell>
-    );
-  }
+        ))}
+      </div>
+    </ModalShell>
+  );
 
-  // ── Step 2: tipo de saída (débito / crédito / parcelado) ─────────────────
-  if (step === 'saida_tipo') {
-    return (
-      <ModalShell title="Tipo de saída" onClose={onClose} onBack={() => setStep('fluxo')}>
-        <p className="faint" style={{ fontSize: 13, margin: '0 0 18px', textAlign: 'center' }}>
-          Como foi essa saída?
-        </p>
-        <div className="tipo-lancamento-grid">
-          {SAIDA_OPTIONS.map(opt => (
-            <button key={opt.id} onClick={() => { setTipo(opt.id); setStep('form'); }}
-              style={{ padding: '20px 12px', borderRadius: 16, border: `2px solid ${tipo===opt.id ? opt.color : 'var(--line)'}`,
-                background: tipo===opt.id ? `color-mix(in oklab, ${opt.color} 12%, transparent)` : 'transparent',
-                cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-                transition: 'all 0.18s var(--ease)', fontFamily: 'var(--font-ui)' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = opt.color; e.currentTarget.style.background = `color-mix(in oklab, ${opt.color} 10%, transparent)`; }}
-              onMouseLeave={e => { if (tipo!==opt.id) { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'transparent'; } }}>
-              <div style={{ width: 48, height: 48, borderRadius: '50%', background: `color-mix(in oklab, ${opt.color} 14%, transparent)`,
-                display: 'grid', placeItems: 'center' }}>
-                <span style={{ color: opt.color }}>{Ic[opt.icon]({ size: 22 })}</span>
-              </div>
-              <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>{opt.label}</span>
-              <span className="faint" style={{ fontSize: 11.5, textAlign: 'center' }}>{opt.sub}</span>
-            </button>
-          ))}
-        </div>
-      </ModalShell>
-    );
-  }
-
-  // ── Step 3: fill form ─────────────────────────────────────────────────────
-  const tipoOpt = isReceita
-    ? { label: 'Entrada', icon: 'arrowDown', color: 'var(--positive)' }
-    : SAIDA_OPTIONS.find(o => o.id === tipo) || SAIDA_OPTIONS[0];
+  // ── Step 2: form ─────────────────────────────────────────────────────────
   return (
-    <ModalShell
-      title={isEdit ? 'Editar lançamento' : `Novo lançamento`}
-      onClose={onClose}
-      onBack={!isEdit ? () => setStep(isReceita ? 'fluxo' : 'saida_tipo') : undefined}
-    >
-      {/* Tipo badge */}
-      {!isEdit && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10,
-          background: `color-mix(in oklab, ${tipoOpt?.color} 12%, transparent)`,
-          marginBottom: 16, width: 'fit-content' }}>
-          <span style={{ color: tipoOpt?.color }}>{Ic[tipoOpt?.icon]({ size: 16 })}</span>
-          <span style={{ fontWeight: 700, fontSize: 13, color: tipoOpt?.color }}>{tipoOpt?.label}</span>
-          <span className="faint" style={{ fontSize: 12 }}>— {tipoOpt?.sub}</span>
-        </div>
-      )}
+    <ModalShell title={isEdit ? 'Editar lançamento' : 'Novo lançamento'} onClose={onClose}
+      onBack={!isEdit ? () => setStep('fluxo') : undefined}>
 
-      {/* Descrição */}
-      <label className="ev-label">Descrição</label>
-      <div className="field" style={{ marginTop: 6 }}>
-        <Ic.receipt size={16} style={{ color: 'var(--ink-faint)' }}/>
-        <input autoFocus value={f.desc||''} onChange={e => set('desc', e.target.value)}
-          placeholder={isReceita ? 'Ex.: Salário mensal' : 'Ex.: Aluguel'} />
+      {/* Descrição + Data lado a lado */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10 }}>
+        <div>
+          <label className="ev-label">Descrição</label>
+          <div className="field" style={{ marginTop:6 }}>
+            <Ic.receipt size={16} style={{ color:'var(--ink-faint)' }}/>
+            <input autoFocus value={f.desc||''} onChange={e => set('desc', e.target.value)}
+              placeholder={isReceita ? 'Ex.: Salário mensal' : 'Ex.: Supermercado'}/>
+          </div>
+        </div>
+        <div>
+          <label className="ev-label">Data</label>
+          <div className="field" style={{ marginTop:6, padding:'10px 12px' }}>
+            <input type="date" value={f.data_compra||''} onChange={e => set('data_compra', e.target.value)}
+              style={{ border:'none', background:'none', outline:'none', fontFamily:'var(--font-ui)', fontSize:13, color:'var(--ink)', width:130 }}/>
+          </div>
+        </div>
       </div>
 
       {/* Categoria */}
-      <label className="ev-label" style={{ marginTop: 14 }}>Categoria</label>
-      <div className="cat-scroll" style={{ marginTop: 7 }}>
+      <label className="ev-label" style={{ marginTop:14 }}>Categoria</label>
+      <div className="cat-scroll" style={{ marginTop:7 }}>
         {cats.map(cat => {
           const on = f.cat === cat;
           const cor = CustomCategoryStore.resolveColor(cat);
           return (
             <button key={cat} onClick={() => set('cat', cat)}
-              style={{ padding: '6px 11px', borderRadius: 999, cursor: 'pointer',
-                fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 600, transition: 'all 0.15s',
-                border: `1px solid ${on ? cor : 'var(--line)'}`,
-                background: on ? `color-mix(in oklab, ${cor} 16%, transparent)` : 'transparent',
+              style={{ padding:'6px 11px', borderRadius:999, cursor:'pointer', fontFamily:'var(--font-ui)',
+                fontSize:12.5, fontWeight:600, transition:'all 0.15s',
+                border:`1px solid ${on ? cor : 'var(--line)'}`,
+                background: on ? `color-mix(in oklab,${cor} 16%,transparent)` : 'transparent',
                 color: on ? 'var(--ink)' : 'var(--ink-soft)' }}>
               {cat}
             </button>
@@ -562,143 +560,165 @@ function TransactionModal({ modal, onSave, onDelete, onClose, catStore, cardStor
         })}
         {onNewCat && (
           <button onClick={() => { onClose(); setTimeout(onNewCat, 100); }}
-            style={{ padding: '6px 11px', borderRadius: 999, cursor: 'pointer',
-              fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 600,
-              border: '1px dashed var(--primary)', background: 'transparent', color: 'var(--primary)',
-              display: 'flex', alignItems: 'center', gap: 5 }}>
+            style={{ padding:'6px 11px', borderRadius:999, cursor:'pointer', fontFamily:'var(--font-ui)',
+              fontSize:12.5, fontWeight:600, border:'1px dashed var(--primary)', background:'transparent',
+              color:'var(--primary)', display:'flex', alignItems:'center', gap:5 }}>
             <Ic.plus size={13}/>Nova categoria
           </button>
         )}
       </div>
 
-      {/* Valor + Dia */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
-        <div>
-          <label className="ev-label">Valor (R$)</label>
-          <div className="field" style={{ marginTop: 6, padding: '10px 12px' }}>
-            <input type="number" min="0" step="0.01" value={f.valor}
-              onChange={e => set('valor', e.target.value)} placeholder="0,00"
-              style={{ flex:1, border:'none', background:'none', outline:'none', fontFamily:'var(--font-ui)', fontSize:14, color:'var(--ink)' }}/>
-          </div>
-        </div>
-        <div>
-          <label className="ev-label">Dia do mês</label>
-          <div className="field" style={{ marginTop: 6, padding: '10px 12px' }}>
-            <input type="number" min="1" max="31" value={f.dia||''}
-              onChange={e => set('dia', e.target.value)}
-              style={{ flex:1, border:'none', background:'none', outline:'none', fontFamily:'var(--font-ui)', fontSize:14, color:'var(--ink)' }}/>
-          </div>
+      {/* Valor */}
+      <div style={{ marginTop:14 }}>
+        <label className="ev-label">Valor (R$)</label>
+        <div className="field" style={{ marginTop:6, padding:'10px 14px' }}>
+          <Ic.wallet size={16} style={{ color:'var(--ink-faint)' }}/>
+          <input type="number" min="0" step="0.01" value={f.valor}
+            onChange={e => set('valor', e.target.value)} placeholder="0,00"
+            style={{ flex:1, border:'none', background:'none', outline:'none', fontFamily:'var(--font-ui)', fontSize:15, fontWeight:700, color:'var(--ink)' }}/>
         </div>
       </div>
 
-      {/* Parcelamento (só para credito_parcelado) */}
-      {isParcelado && (
+      {/* Forma de pagamento (só para saídas) */}
+      {!isReceita && (
         <React.Fragment>
-          <label className="ev-label" style={{ marginTop: 14 }}>Parcelamento</label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 7 }}>
-            {[2,3,4,5,6,7,8,9,10,12,15,18,24].map(n => {
+          <label className="ev-label" style={{ marginTop:14 }}>Forma de pagamento</label>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:7 }}>
+            {FORMA_PAGAMENTO.map(fp => {
+              const on = f.forma_pagamento === fp.id;
+              return (
+                <button key={fp.id} onClick={() => { set('forma_pagamento', fp.id); if (fp.id !== 'credito') set('card_id', ''); }}
+                  style={{ padding:'7px 13px', borderRadius:999, cursor:'pointer', fontFamily:'var(--font-ui)',
+                    fontSize:13, fontWeight:600, transition:'all 0.15s', display:'flex', alignItems:'center', gap:6,
+                    border:`1px solid ${on ? fp.color : 'var(--line)'}`,
+                    background: on ? `color-mix(in oklab,${fp.color} 14%,transparent)` : 'transparent',
+                    color: on ? 'var(--ink)' : 'var(--ink-soft)' }}>
+                  {Ic[fp.icon] ? Ic[fp.icon]({ size:14 }) : null}
+                  {fp.label}
+                </button>
+              );
+            })}
+          </div>
+        </React.Fragment>
+      )}
+
+      {/* Cartão de crédito */}
+      {isCredito && (
+        <React.Fragment>
+          <label className="ev-label" style={{ marginTop:14 }}>Cartão <span style={{ color:'var(--negative)' }}>*</span></label>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:7 }}>
+            {cards.map(card => {
+              const on = f.card_id === card.id;
+              return (
+                <button key={card.id} onClick={() => set('card_id', on ? '' : card.id)}
+                  style={{ padding:'8px 14px', borderRadius:12, cursor:'pointer', fontFamily:'var(--font-ui)',
+                    fontSize:13, fontWeight:600, display:'flex', alignItems:'center', gap:7, transition:'all 0.15s',
+                    border:`1px solid ${on ? card.color : 'var(--line)'}`,
+                    background: on ? `color-mix(in oklab,${card.color} 14%,transparent)` : 'transparent',
+                    color: on ? card.color : 'var(--ink-soft)' }}>
+                  <span style={{ width:9, height:9, borderRadius:'50%', background:card.color, flexShrink:0 }}/>
+                  {card.name}
+                  {card.dia_fechamento ? <span className="faint" style={{ fontSize:11 }}>fecha dia {card.dia_fechamento}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Parcelas */}
+          <label className="ev-label" style={{ marginTop:14 }}>Parcelas</label>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:7, marginTop:7 }}>
+            {PARCELAS_OPTS.map(n => {
               const on = parseInt(f.parcelas) === n;
               return (
                 <button key={n} onClick={() => set('parcelas', n)}
-                  style={{ width: 46, height: 36, borderRadius: 10, cursor: 'pointer',
-                    fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700,
-                    border: `1px solid ${on ? 'var(--warn)' : 'var(--line)'}`,
-                    background: on ? 'color-mix(in oklab, var(--warn) 16%, transparent)' : 'transparent',
-                    color: on ? 'var(--warn)' : 'var(--ink-soft)', transition: 'all 0.15s' }}>
+                  style={{ width:44, height:34, borderRadius:10, cursor:'pointer',
+                    fontFamily:'var(--font-ui)', fontSize:13, fontWeight:700, transition:'all 0.15s',
+                    border:`1px solid ${on ? '#7c93c4' : 'var(--line)'}`,
+                    background: on ? 'color-mix(in oklab,#7c93c4 16%,transparent)' : 'transparent',
+                    color: on ? '#7c93c4' : 'var(--ink-soft)' }}>
                   {n}x
                 </button>
               );
             })}
           </div>
-          {/* Mês de início */}
-          <div style={{ marginTop: 12 }}>
-            <label className="ev-label">Primeira parcela cai em</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 7 }}>
-              {Array.from({ length: 12 }, (_, i) => {
-                const d = new Date(); d.setMonth(d.getMonth() + i);
-                const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-                const mon = d.toLocaleString('pt-BR', { month: 'short' }).replace('.','');
-                const yr  = String(d.getFullYear()).slice(2);
-                const label = `${mon}/${yr}`;
-                const on = f.mes_inicio === val;
-                return (
-                  <button key={val} onClick={() => set('mes_inicio', val)}
-                    style={{ padding: '5px 11px', borderRadius: 999, cursor: 'pointer',
-                      fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 600, transition: 'all 0.15s',
-                      border: `1px solid ${on ? 'var(--warn)' : 'var(--line)'}`,
-                      background: on ? 'color-mix(in oklab, var(--warn) 14%, transparent)' : 'transparent',
-                      color: on ? 'var(--warn)' : 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          {valorParcela > 0 && (
-            <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 12,
-              background: 'color-mix(in oklab, var(--warn) 10%, transparent)',
-              border: '1px solid color-mix(in oklab, var(--warn) 25%, transparent)' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--warn)' }}>
-                {f.parcelas}x de {brl(valorParcela)} · total {brl(parseFloat(f.valor)||0)}
-              </span>
+
+          {/* Fatura auto-calculada */}
+          {faturaPreview && selectedCard && (
+            <div style={{ marginTop:12, padding:'12px 14px', borderRadius:12, fontSize:13,
+              background:'color-mix(in oklab,#7c93c4 9%,transparent)',
+              border:'1px solid color-mix(in oklab,#7c93c4 22%,transparent)' }}>
+              <div style={{ fontWeight:700, color:'#7c93c4', marginBottom:6 }}>📅 Fatura calculada automaticamente</div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
+                <div>
+                  <div className="faint" style={{ fontSize:11, fontWeight:600 }}>FECHAMENTO</div>
+                  <div style={{ fontWeight:700 }}>Dia {selectedCard.dia_fechamento || 1}</div>
+                </div>
+                <div>
+                  <div className="faint" style={{ fontSize:11, fontWeight:600 }}>FATURA</div>
+                  <div style={{ fontWeight:700 }}>
+                    {new Date(faturaPreview.faturaRef + '-01T12:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}
+                  </div>
+                </div>
+                <div>
+                  <div className="faint" style={{ fontSize:11, fontWeight:600 }}>VENCIMENTO</div>
+                  <div style={{ fontWeight:700, color:'var(--primary)' }}>
+                    {new Date(faturaPreview.vencDate + 'T12:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}
+                  </div>
+                </div>
+              </div>
+              {isParcelado && valorParcela > 0 && (
+                <div style={{ marginTop:8, paddingTop:8, borderTop:'1px solid color-mix(in oklab,#7c93c4 18%,transparent)' }}>
+                  <span style={{ fontWeight:600 }}>{f.parcelas}x de {brl(valorParcela)}</span>
+                  <span className="faint"> · total {brl(parseFloat(f.valor)||0)}</span>
+                  <span className="faint"> · 1ª parcela vence {new Date(faturaPreview.vencDate + 'T12:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}</span>
+                </div>
+              )}
             </div>
           )}
         </React.Fragment>
       )}
 
-      {/* Cartão */}
-      {cards.length > 0 && (
+      {/* Data de vencimento (boleto, outro, débito) */}
+      {!isReceita && !isCredito && (f.forma_pagamento === 'boleto' || f.forma_pagamento === 'outro' || f.forma_pagamento === 'transferencia') && (
         <React.Fragment>
-          <label className="ev-label" style={{ marginTop: 14 }}>Cartão utilizado <span className="faint" style={{ textTransform: 'none', fontWeight: 500 }}>(opcional)</span></label>
-          <div className="card-selector-grid" style={{ marginTop: 7 }}>
-            {cards.map(card => {
-              const on = f.card_id === card.id;
-              return (
-                <button key={card.id} onClick={() => set('card_id', on ? '' : card.id)}
-                  style={{ padding: '8px 14px', borderRadius: 12, cursor: 'pointer',
-                    fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600,
-                    border: `1px solid ${on ? card.color : 'var(--line)'}`,
-                    background: on ? `color-mix(in oklab, ${card.color} 14%, transparent)` : 'transparent',
-                    color: on ? card.color : 'var(--ink-soft)',
-                    display: 'flex', alignItems: 'center', gap: 7, transition: 'all 0.15s' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: card.color, flexShrink: 0 }}/>
-                  {card.name}
-                </button>
-              );
-            })}
+          <label className="ev-label" style={{ marginTop:14 }}>
+            Data de vencimento <span className="faint" style={{ textTransform:'none', fontWeight:500 }}>(opcional)</span>
+          </label>
+          <div className="field" style={{ marginTop:6, padding:'10px 12px' }}>
+            <Ic.clock size={16} style={{ color:'var(--ink-faint)' }}/>
+            <input type="date" value={f.data_vencimento||''} onChange={e => set('data_vencimento', e.target.value)}
+              style={{ flex:1, border:'none', background:'none', outline:'none', fontFamily:'var(--font-ui)', fontSize:13, color:'var(--ink)' }}/>
           </div>
         </React.Fragment>
       )}
 
       {/* Recorrente */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
-        <button onClick={() => set('recorrente', !f.recorrente)}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, border: 'none', background: 'none',
-            cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: 13.5, color: 'var(--ink)', padding: 0 }}>
-          <div style={{ width: 20, height: 20, borderRadius: 6,
-            border: `2px solid ${f.recorrente ? 'var(--primary)' : 'var(--line-strong)'}`,
-            display: 'grid', placeItems: 'center', background: f.recorrente ? 'var(--primary)' : 'transparent' }}>
-            {f.recorrente && <Ic.check size={13} style={{ color: '#fff' }}/>}
-          </div>
-          Recorrente (fixo mensal)
-        </button>
-      </div>
+      <button onClick={() => set('recorrente', !f.recorrente)}
+        style={{ display:'flex', alignItems:'center', gap:8, border:'none', background:'none',
+          cursor:'pointer', fontFamily:'var(--font-ui)', fontSize:13.5, color:'var(--ink)', padding:'14px 0 0', marginTop:2 }}>
+        <div style={{ width:20, height:20, borderRadius:6,
+          border:`2px solid ${f.recorrente ? 'var(--primary)' : 'var(--line-strong)'}`,
+          display:'grid', placeItems:'center', background: f.recorrente ? 'var(--primary)' : 'transparent' }}>
+          {f.recorrente && <Ic.check size={13} style={{ color:'#fff' }}/>}
+        </div>
+        Recorrente (fixo mensal)
+      </button>
 
       {/* Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 22 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:20 }}>
         {onDelete ? (
           <React.Fragment>
-            <button className="btn btn-ghost" onClick={() => onDelete(false)} style={{ color: 'var(--negative)' }}>
+            <button className="btn btn-ghost" onClick={() => onDelete(false)} style={{ color:'var(--negative)' }}>
               <Ic.trash size={15}/>Excluir
             </button>
             {modal.entry?.installment_group_id && (
-              <button className="btn btn-ghost" onClick={() => onDelete(true)} style={{ color: 'var(--negative)', fontSize: 12 }}>
+              <button className="btn btn-ghost" onClick={() => onDelete(true)} style={{ color:'var(--negative)', fontSize:12 }}>
                 Excluir todas parcelas
               </button>
             )}
           </React.Fragment>
-        ) : <span style={{ flex: 1 }}/>}
-        <span style={{ flex: 1 }}/>
+        ) : <span style={{ flex:1 }}/>}
+        <span style={{ flex:1 }}/>
         <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
         <button className="btn" disabled={!valid} onClick={handleSave} style={{ opacity: valid ? 1 : 0.5 }}>
           <Ic.check size={16}/>{isEdit ? 'Salvar' : 'Criar'}
@@ -859,6 +879,26 @@ function CardEditForm({ card: initCard, isNew, onSave, onDelete, onBack }) {
           placeholder="R$ 0,00"
           style={{ flex:1, border:'none', background:'none', outline:'none', fontFamily:'var(--font-ui)', fontSize:14, color:'var(--ink)' }}/>
       </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:14 }}>
+        <div>
+          <label className="ev-label">Dia de fechamento</label>
+          <div className="field" style={{ marginTop:6, padding:'10px 12px' }}>
+            <input type="number" min="1" max="31" value={f.dia_fechamento||''} onChange={e => set('dia_fechamento', parseInt(e.target.value)||1)}
+              placeholder="Ex.: 15"
+              style={{ flex:1, border:'none', background:'none', outline:'none', fontFamily:'var(--font-ui)', fontSize:14, color:'var(--ink)' }}/>
+          </div>
+        </div>
+        <div>
+          <label className="ev-label">Dia de vencimento</label>
+          <div className="field" style={{ marginTop:6, padding:'10px 12px' }}>
+            <input type="number" min="1" max="31" value={f.dia_vencimento||''} onChange={e => set('dia_vencimento', parseInt(e.target.value)||10)}
+              placeholder="Ex.: 25"
+              style={{ flex:1, border:'none', background:'none', outline:'none', fontFamily:'var(--font-ui)', fontSize:14, color:'var(--ink)' }}/>
+          </div>
+        </div>
+      </div>
+      <p className="faint" style={{ fontSize:11.5, margin:'6px 0 0' }}>Usado para calcular a fatura automaticamente ao criar lançamentos no crédito.</p>
 
       <label className="ev-label" style={{ marginTop: 14 }}>Cor</label>
       <div style={{ display: 'flex', gap: 8, marginTop: 7, flexWrap: 'wrap' }}>
