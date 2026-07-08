@@ -8,6 +8,7 @@ const WIDGET_DEFS = [
   { id: 'financeiro',   label: 'Resumo financeiro',    icon: 'wallet',   defaultSize: 'half' },
   { id: 'habitos',      label: 'Hábitos de hoje',      icon: 'flame',    defaultSize: 'half' },
   { id: 'investimentos',label: 'Investimentos',        icon: 'arrowUp',  defaultSize: 'full' },
+  { id: 'obrigacoes',   label: 'Próximas obrigações',  icon: 'clock',    defaultSize: 'half' },
   { id: 'tarefas',      label: 'Tarefas pendentes',    icon: 'kanban',   defaultSize: 'half' },
   { id: 'metas',        label: 'Metas em andamento',   icon: 'target',   defaultSize: 'half' },
 ];
@@ -488,6 +489,79 @@ function Dashboard({ go }) {
           )}
         </GlassCard>
       );
+
+      case 'obrigacoes': {
+        // Coleta contas programadas + faturas dos próximos 90 dias
+        const hoje = new Date().toISOString().slice(0,10);
+        const limite90 = new Date(); limite90.setDate(limite90.getDate() + 90);
+        const lim90Str = limite90.toISOString().slice(0,10);
+        const mesAtualOb = hoje.slice(0,7);
+
+        const obItems = [];
+
+        // Contas programadas (recorrentes)
+        if (window.ContasProgramadasStore) {
+          for (let i = 0; i < 4; i++) {
+            const mes = (() => { const d = new Date(mesAtualOb + '-01T12:00'); d.setMonth(d.getMonth()+i); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; })();
+            window.ContasProgramadasStore.getForMes(mes).forEach(c => {
+              if (c.status === 'pago') return;
+              const vd = c.vencDate || `${mes}-${String(c.dia||1).padStart(2,'0')}`;
+              if (vd >= hoje && vd <= lim90Str) obItems.push({ _k: c.id+mes, label: c.desc, sub: c.categoria, valor: c.valor, venc: vd, tipo: 'conta', status: c.status });
+            });
+          }
+        }
+        // Faturas abertas
+        if (window.FaturaStore) {
+          window.FaturaStore.getAll().filter(f => f.status !== 'pago' && f.venc_date >= hoje && f.venc_date <= lim90Str).forEach(f => {
+            if (!f.valor_total) return;
+            const card = window.CardStore ? window.CardStore.getById(f.card_id) : null;
+            obItems.push({ _k: f.id, label: `Fatura ${card ? card.name : 'Cartão'}`, sub: 'Cartão de crédito', valor: f.valor_total, venc: f.venc_date, tipo: 'fatura', cardColor: card ? card.color : '#7c93c4', status: f.status });
+          });
+        }
+        obItems.sort((a,b) => a.venc.localeCompare(b.venc));
+
+        return (
+          <GlassCard style={{ padding:22, height:'100%' }}>
+            <CardTitle icon="clock" title="Próximas obrigações" action="Ver agenda" onAction={() => go('contas')} />
+            {obItems.length === 0 ? (
+              <div className="faint" style={{ fontSize:12.5, textAlign:'center', padding:'20px 0' }}>
+                Nenhuma obrigação nos próximos 90 dias.
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:14 }}>
+                {obItems.slice(0,6).map(ob => {
+                  const d = new Date(ob.venc+'T12:00');
+                  const dStr = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
+                  const cor  = ob.tipo === 'fatura' ? (ob.cardColor || '#7c93c4') : 'var(--warn)';
+                  const atrasado = ob.status === 'atrasado' || ob.status === 'atrasada';
+                  return (
+                    <div key={ob._k} style={{ display:'flex', alignItems:'center', gap:12, padding:'9px 12px', borderRadius:12,
+                      background: atrasado ? 'color-mix(in oklab,var(--negative) 5%,var(--chip-bg))' : 'var(--chip-bg)',
+                      border:`1px solid ${atrasado ? 'color-mix(in oklab,var(--negative) 18%,transparent)' : 'transparent'}` }}>
+                      <div style={{ textAlign:'center', minWidth:40, flexShrink:0 }}>
+                        <div style={{ fontWeight:800, fontSize:13, color: atrasado ? 'var(--negative)' : 'var(--ink)' }}>
+                          {String(d.getDate()).padStart(2,'0')}
+                        </div>
+                        <div className="faint" style={{ fontSize:10.5, textTransform:'uppercase' }}>
+                          {d.toLocaleDateString('pt-BR',{month:'short'}).replace('.','').slice(0,3)}
+                        </div>
+                      </div>
+                      <div style={{ width:3, alignSelf:'stretch', borderRadius:4, background:cor, flexShrink:0 }}/>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:700, fontSize:13.5, color:'var(--ink)' }}>{ob.label}</div>
+                        <div className="faint" style={{ fontSize:11.5 }}>{ob.sub}</div>
+                      </div>
+                      <div style={{ fontWeight:800, fontSize:13.5, color: atrasado ? 'var(--negative)' : 'var(--ink)', flexShrink:0 }}>
+                        {brl(ob.valor)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </GlassCard>
+        );
+      }
 
       case 'metas': return (
         <GlassCard style={{ padding: 22, height: '100%' }}>

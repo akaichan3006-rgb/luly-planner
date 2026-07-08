@@ -184,20 +184,45 @@ const FinanceStore = (() => {
     return d.status === 'pago';
   };
 
-  const getSaldo = () =>
-    state.receitas.reduce((s,r) => s+(r.valor||0), 0)
-    - state.despesas.filter(_contaNoSaldo).reduce((s,d) => s+(d.valor||0), 0);
+  // Saldo = receitas - despesas_não_crédito - faturas_pagas
+  const getSaldo = () => {
+    const recTotal  = state.receitas.reduce((s,r) => s+(r.valor||0), 0);
+    const despTotal = state.despesas.filter(_contaNoSaldo).reduce((s,d) => s+(d.valor||0), 0);
+    const fatPagas  = window.FaturaStore ? window.FaturaStore.getTotalPago() : 0;
+    return recTotal - despTotal - fatPagas;
+  };
 
   const getEntradasMes = () => receitasMes().reduce((s,r) => s+(r.valor||0), 0);
-  const getSaidasMes   = () => despesasMes().filter(_contaNoSaldo).reduce((s,d) => s+(d.valor||0), 0);
+  const getSaidasMes = () => {
+    const despSaidas = despesasMes().filter(_contaNoSaldo).reduce((s,d) => s+(d.valor||0), 0);
+    const mes = _mesAtual();
+    // Faturas pagas neste mês também entram como saída
+    const fatSaidas = window.FaturaStore
+      ? window.FaturaStore.getAll()
+        .filter(f => f.status === 'pago' && (f.data_pagamento||'').slice(0,7) === mes)
+        .reduce((s,f) => s+(f.valor_total||0), 0)
+      : 0;
+    return despSaidas + fatSaidas;
+  };
   const getEconomiaMes = () => getEntradasMes() - getSaidasMes();
 
   const getCategorias = () => {
     const map = {};
+    // Despesas não-crédito do mês atual
     despesasMes().filter(_contaNoSaldo).forEach(d => {
       const cat = d.cat || 'Outros';
       map[cat] = (map[cat] || 0) + (d.valor || 0);
     });
+    // Compras de crédito feitas neste mês (por data_compra)
+    if (window.CompraStore) {
+      const mes = _mesAtual();
+      window.CompraStore.getAll()
+        .filter(c => (c.data_compra || '').slice(0,7) === mes)
+        .forEach(c => {
+          const cat = c.cat || 'Outros';
+          map[cat] = (map[cat] || 0) + (c.valor || 0);
+        });
+    }
     return Object.entries(map)
       .map(([nome, valor]) => ({
         nome, valor,
@@ -297,77 +322,48 @@ const FinanceStore = (() => {
     };
   };
 
-  // ADD — handles regular, credit-single, and credit-installment entries
+  // ADD — credit purchases → CompraStore + FaturaStore; others → despesas
   const add = (tipo, entry) => {
     const isCredito = entry.forma_pagamento === 'credito';
-    const isParcelado = isCredito && entry.parcelas >= 2;
-    const card = entry.card_id ? CardStore.getById(entry.card_id) : null;
+    const isParcelado = isCredito && (entry.parcelas || 1) >= 2;
 
-    if (isParcelado && card) {
-      // Credit installments with auto-calculated vencimento dates
-      const groupId = _uid('grp');
-      const valorParcela = Math.round(((entry.valor || 0) / entry.parcelas) * 100) / 100;
-      const novas = [];
-      for (let i = 0; i < entry.parcelas; i++) {
-        const { faturaRef, vencDate } = _creditoVenc(card, entry.data_compra, i);
-        const vencDay = parseInt(vencDate.slice(8, 10)) || (card.dia_vencimento || 10);
-        novas.push({
-          id: _uid('d'),
-          ...entry,
-          valor: valorParcela,
-          mes_ref: faturaRef,
-          fatura_mes: faturaRef,
-          data_vencimento: vencDate,
-          dia: vencDay,
-          status: 'pendente',
-          installment_group_id: groupId,
-          installment_number: i + 1,
-          total_installments: entry.parcelas,
-          created_at: new Date().toISOString(),
-        });
+    // ── CRÉDITO: roteia para CompraStore + FaturaStore ──────────────────────
+    if (isCredito && window.CompraStore && window.FaturaStore) {
+      const n = isParcelado ? (entry.parcelas || 2) : 1;
+      const compraBase = {
+        desc: entry.desc, cat: entry.cat, valor: entry.valor,
+        data_compra: entry.data_compra || new Date().toISOString().slice(0,10),
+        card_id: entry.card_id, forma_pagamento: 'credito',
+      };
+      let novas;
+      if (n >= 2) {
+        novas = window.CompraStore.addParceladas(compraBase, n);
+      } else {
+        // Compra à vista: fatura = próximo mês
+        const d = new Date((compraBase.data_compra) + 'T12:00');
+        let mo = d.getMonth() + 2, yr = d.getFullYear();
+        if (mo > 12) { mo = 1; yr++; }
+        const fatura_mes = `${yr}-${String(mo).padStart(2,'0')}`;
+        novas = [window.CompraStore.add({ ...compraBase, fatura_mes, parcela_num: 1, total_parcelas: 1 })];
       }
-      state = { ...state, despesas: [...state.despesas, ...novas] };
-      persist();
+      // Garante que as faturas existam e recalcula totais
+      const faturaMeses = [...new Set(novas.map(c => c.fatura_mes))];
+      faturaMeses.forEach(mes_ref => {
+        window.FaturaStore.getOrCreate(entry.card_id, mes_ref);
+        window.FaturaStore.recalcTotal(entry.card_id, mes_ref);
+      });
+      emit();
       return novas;
     }
 
-    // Backward-compat: old-style credito_parcelado without forma_pagamento
-    if (entry.tipo_lancamento === 'credito_parcelado' && entry.parcelas >= 2 && !isCredito) {
-      const groupId = _uid('grp');
-      const valorParcela = Math.round(((entry.valor || 0) / entry.parcelas) * 100) / 100;
-      const novas = [];
-      const mesBase = entry.mes_inicio ? new Date(entry.mes_inicio + '-01T12:00') : new Date();
-      const calcMes = (offset) => {
-        const d = new Date(mesBase); d.setMonth(d.getMonth() + offset);
-        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-      };
-      for (let i = 0; i < entry.parcelas; i++) {
-        novas.push({ id: _uid('d'), ...entry, valor: valorParcela, mes_ref: calcMes(i),
-          installment_group_id: groupId, installment_number: i + 1,
-          total_installments: entry.parcelas, created_at: new Date().toISOString() });
-      }
-      state = { ...state, despesas: [...state.despesas, ...novas] };
-      persist(); return novas;
-    }
-
-    // Single entry (credit or other)
-    let mesRef = _mesAtual();
-    let diaRef = entry.dia || new Date().getDate();
-    let faturaFields = {};
-    if (isCredito && card) {
-      const { faturaRef, vencDate } = calcFaturaFromCard(card, entry.data_compra);
-      mesRef = faturaRef;
-      diaRef = parseInt(vencDate.slice(8,10)) || diaRef;
-      faturaFields = { fatura_mes: faturaRef, data_vencimento: vencDate, status: 'pendente' };
-    }
+    // ── NÃO-CRÉDITO: entra direto como despesa ───────────────────────────────
     const rec = {
       id: _uid(tipo[0]),
-      mes_ref: mesRef,
-      dia: diaRef,
+      mes_ref: _mesAtual(),
+      dia: entry.dia || new Date().getDate(),
       created_at: new Date().toISOString(),
-      status: tipo === 'receita' ? 'recebido' : (entry.forma_pagamento ? 'pendente' : 'pago'),
+      status: tipo === 'receita' ? 'recebido' : 'pago',
       ...entry,
-      ...faturaFields,
     };
     if (tipo === 'receita') state = { ...state, receitas: [...state.receitas, rec] };
     else                    state = { ...state, despesas: [...state.despesas, rec] };
@@ -437,6 +433,7 @@ const FinanceStore = (() => {
     getGastosPorCartao, getParcelasFuturas,
     getContasPendentes, getProximosPagamentos, marcarPago, marcarPendente,
     add, update, remove,
+    _emit: emit,
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
   };
 })();
@@ -661,6 +658,180 @@ const InvestmentStore = (() => {
   };
 })();
 window.InvestmentStore = InvestmentStore;
+
+// ─── CompraStore ─────────────────────────────────────────────────────────────
+// Armazena compras individuais feitas no crédito.
+// Cada compra pertence a uma fatura (card_id + fatura_mes).
+const CompraStore = (() => {
+  const KEY = 'ps_compras';
+  const listeners = new Set();
+  const emit = () => listeners.forEach(fn => fn());
+  const persist = (d) => { localStorage.setItem(KEY, JSON.stringify(d)); emit(); };
+  const load = () => _load(KEY, []);
+
+  const getAll = () => load();
+  const getByFatura = (card_id, fatura_mes) =>
+    load().filter(c => c.card_id === card_id && c.fatura_mes === fatura_mes);
+
+  const add = (compra) => {
+    const all = load();
+    const rec = { id: _uid('comp'), status: 'pendente', created_at: new Date().toISOString(), ...compra };
+    all.push(rec);
+    persist(all);
+    return rec;
+  };
+
+  // Gera N compras parceladas, cada uma com fatura_mes = compra_month + 1 + i
+  const addParceladas = (base, n) => {
+    const d = new Date((base.data_compra || new Date().toISOString().slice(0,10)) + 'T12:00');
+    const baseYr = d.getFullYear(), baseMo = d.getMonth() + 1;
+    const groupId = _uid('cg');
+    const valorParcela = Math.round(((base.valor || 0) / n) * 100) / 100;
+    const all = load();
+    const novas = [];
+    for (let i = 0; i < n; i++) {
+      let mo = baseMo + 1 + i, yr = baseYr;
+      while (mo > 12) { mo -= 12; yr++; }
+      const fatura_mes = `${yr}-${String(mo).padStart(2,'0')}`;
+      const rec = { id: _uid('comp'), ...base, valor: valorParcela,
+        parcela_num: i + 1, total_parcelas: n, fatura_mes, group_id: groupId,
+        status: 'pendente', created_at: new Date().toISOString() };
+      all.push(rec);
+      novas.push(rec);
+    }
+    persist(all);
+    return novas;
+  };
+
+  const marcarPagas = (card_id, fatura_mes) => {
+    persist(load().map(c =>
+      c.card_id === card_id && c.fatura_mes === fatura_mes ? { ...c, status: 'pago' } : c
+    ));
+  };
+  const desfazerPagas = (card_id, fatura_mes) => {
+    persist(load().map(c =>
+      c.card_id === card_id && c.fatura_mes === fatura_mes && c.status === 'pago'
+        ? { ...c, status: 'pendente' } : c
+    ));
+  };
+
+  const remove = (id) => persist(load().filter(c => c.id !== id));
+  const removeGroup = (group_id) => persist(load().filter(c => c.group_id !== group_id));
+
+  return {
+    getAll, getByFatura, add, addParceladas, marcarPagas, desfazerPagas, remove, removeGroup,
+    subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
+  };
+})();
+window.CompraStore = CompraStore;
+
+function useCompraStore() {
+  const [, force] = React.useState(0);
+  React.useEffect(() => CompraStore.subscribe(() => force(n => n + 1)), []);
+  return CompraStore;
+}
+window.useCompraStore = useCompraStore;
+
+// ─── FaturaStore ──────────────────────────────────────────────────────────────
+// Agrupa compras por cartão + mês. Uma fatura = um cartão + um mês.
+const FaturaStore = (() => {
+  const KEY = 'ps_faturas';
+  const listeners = new Set();
+  const emit = () => listeners.forEach(fn => fn());
+  const persist = (d) => { localStorage.setItem(KEY, JSON.stringify(d)); emit(); };
+  const load = () => _load(KEY, []);
+
+  const getAll = () => load();
+
+  const _vencDate = (card_id, mes_ref) => {
+    const card = CardStore.getById ? CardStore.getById(card_id) : null;
+    const dia = card ? (card.dia_vencimento || 10) : 10;
+    return `${mes_ref}-${String(dia).padStart(2,'0')}`;
+  };
+
+  // Retorna ou cria a fatura para card_id + mes_ref
+  const getOrCreate = (card_id, mes_ref) => {
+    let all = load();
+    let fat = all.find(f => f.card_id === card_id && f.mes_ref === mes_ref);
+    if (!fat) {
+      fat = { id: _uid('fat'), card_id, mes_ref, status: 'aberta', valor_total: 0,
+        venc_date: _vencDate(card_id, mes_ref), created_at: new Date().toISOString() };
+      all.push(fat);
+      persist(all);
+    }
+    return fat;
+  };
+
+  // Recalcula o total da fatura somando as compras
+  const recalcTotal = (card_id, mes_ref) => {
+    const compras = CompraStore.getByFatura(card_id, mes_ref);
+    const total = compras.reduce((s, c) => s + (c.valor || 0), 0);
+    const hoje = new Date().toISOString().slice(0,10);
+    persist(load().map(f => {
+      if (f.card_id !== card_id || f.mes_ref !== mes_ref) return f;
+      const vd = f.venc_date || _vencDate(card_id, mes_ref);
+      const status = f.status === 'pago' ? 'pago' : (vd < hoje ? 'atrasada' : 'aberta');
+      return { ...f, valor_total: total, status };
+    }));
+  };
+
+  // Paga a fatura: marca fatura + compras como pagas
+  const pagarFatura = (id) => {
+    const fat = load().find(f => f.id === id);
+    if (!fat) return;
+    persist(load().map(f =>
+      f.id === id ? { ...f, status: 'pago', data_pagamento: new Date().toISOString().slice(0,10) } : f
+    ));
+    CompraStore.marcarPagas(fat.card_id, fat.mes_ref);
+    if (window.FinanceStore) window.FinanceStore._emit();
+  };
+
+  const desfazerPagamento = (id) => {
+    const fat = load().find(f => f.id === id);
+    if (!fat) return;
+    persist(load().map(f =>
+      f.id === id ? { ...f, status: 'aberta', data_pagamento: null } : f
+    ));
+    CompraStore.desfazerPagas(fat.card_id, fat.mes_ref);
+    if (window.FinanceStore) window.FinanceStore._emit();
+  };
+
+  // Total de todas as faturas pagas (para o saldo)
+  const getTotalPago = () =>
+    load().filter(f => f.status === 'pago').reduce((s, f) => s + (f.valor_total || 0), 0);
+
+  // Faturas num intervalo de meses
+  const getFaturasMeses = (fromMes, toMes) =>
+    load().filter(f => f.mes_ref >= fromMes && f.mes_ref <= toMes);
+
+  // Atualiza status de faturas vencidas
+  const updateStatuses = () => {
+    const hoje = new Date().toISOString().slice(0,10);
+    persist(load().map(f => {
+      if (f.status === 'pago') return f;
+      if (f.venc_date && f.venc_date < hoje) return { ...f, status: 'atrasada' };
+      return f;
+    }));
+  };
+
+  return {
+    getAll, getOrCreate, recalcTotal, pagarFatura, desfazerPagamento,
+    getTotalPago, getFaturasMeses, updateStatuses,
+    subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
+  };
+})();
+window.FaturaStore = FaturaStore;
+
+function useFaturaStore() {
+  const [, force] = React.useState(0);
+  React.useEffect(() => {
+    const u1 = FaturaStore.subscribe(() => force(n => n + 1));
+    const u2 = CompraStore.subscribe(() => force(n => n + 1));
+    return () => { u1(); u2(); };
+  }, []);
+  return FaturaStore;
+}
+window.useFaturaStore = useFaturaStore;
 
 // ─── ContasProgramadasStore ───────────────────────────────────────────────────
 // Scheduled/recurring bills. Each entry has: id, desc, valor, dia, categoria,

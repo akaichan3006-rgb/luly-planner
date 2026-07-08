@@ -464,10 +464,16 @@ function TransactionModal({ modal, onSave, onDelete, onClose, catStore, cardStor
   const cards = cardStore ? cardStore.getAll() : [];
   const selectedCard = cards.find(c => c.id === f.card_id) || null;
 
-  // Auto-calculate fatura when credito + card + data_compra
-  const faturaPreview = isCredito && selectedCard && f.data_compra
-    ? (window.calcFaturaFromCard ? window.calcFaturaFromCard(selectedCard, f.data_compra) : null)
-    : null;
+  // Fatura = sempre mês seguinte ao da compra (regra bancária)
+  const faturaPreview = isCredito && f.data_compra ? (() => {
+    const d = new Date(f.data_compra + 'T12:00');
+    let mo = d.getMonth() + 2, yr = d.getFullYear();
+    if (mo > 12) { mo = 1; yr++; }
+    const mes_ref   = `${yr}-${String(mo).padStart(2,'0')}`;
+    const vencDia   = selectedCard ? (selectedCard.dia_vencimento || 10) : 10;
+    const venc_date = `${yr}-${String(mo).padStart(2,'0')}-${String(vencDia).padStart(2,'0')}`;
+    return { faturaRef: mes_ref, vencDate: venc_date };
+  })() : null;
 
   const valorParcela = isParcelado && parseFloat(f.valor) > 0
     ? parseFloat(f.valor) / parseInt(f.parcelas) : 0;
@@ -643,26 +649,24 @@ function TransactionModal({ modal, onSave, onDelete, onClose, catStore, cardStor
           </div>
 
           {/* Fatura auto-calculada */}
-          {faturaPreview && selectedCard && (
+          {faturaPreview && (
             <div style={{ marginTop:12, padding:'12px 14px', borderRadius:12, fontSize:13,
               background:'color-mix(in oklab,#7c93c4 9%,transparent)',
               border:'1px solid color-mix(in oklab,#7c93c4 22%,transparent)' }}>
-              <div style={{ fontWeight:700, color:'#7c93c4', marginBottom:6 }}>📅 Fatura calculada automaticamente</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
-                <div>
-                  <div className="faint" style={{ fontSize:11, fontWeight:600 }}>FECHAMENTO</div>
-                  <div style={{ fontWeight:700 }}>Dia {selectedCard.dia_fechamento || 1}</div>
-                </div>
+              <div style={{ fontWeight:700, color:'#7c93c4', marginBottom:8 }}>📅 Fatura calculada automaticamente</div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
                 <div>
                   <div className="faint" style={{ fontSize:11, fontWeight:600 }}>FATURA</div>
-                  <div style={{ fontWeight:700 }}>
+                  <div style={{ fontWeight:700, textTransform:'capitalize' }}>
                     {new Date(faturaPreview.faturaRef + '-01T12:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}
                   </div>
                 </div>
                 <div>
                   <div className="faint" style={{ fontSize:11, fontWeight:600 }}>VENCIMENTO</div>
                   <div style={{ fontWeight:700, color:'var(--primary)' }}>
-                    {new Date(faturaPreview.vencDate + 'T12:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}
+                    {selectedCard
+                      ? new Date(faturaPreview.vencDate + 'T12:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})
+                      : `dia ${selectedCard ? (selectedCard.dia_vencimento||10) : 10}`}
                   </div>
                 </div>
               </div>
@@ -670,7 +674,6 @@ function TransactionModal({ modal, onSave, onDelete, onClose, catStore, cardStor
                 <div style={{ marginTop:8, paddingTop:8, borderTop:'1px solid color-mix(in oklab,#7c93c4 18%,transparent)' }}>
                   <span style={{ fontWeight:600 }}>{f.parcelas}x de {brl(valorParcela)}</span>
                   <span className="faint"> · total {brl(parseFloat(f.valor)||0)}</span>
-                  <span className="faint"> · 1ª parcela vence {new Date(faturaPreview.vencDate + 'T12:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}</span>
                 </div>
               )}
             </div>
