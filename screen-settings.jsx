@@ -149,16 +149,32 @@ function Settings({ theme, setTheme, userName, setUserName }) {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 3 * 1024 * 1024) { window.showToast && window.showToast('Imagem muito grande. Máximo 3 MB.', 'error'); return; }
+    // Redimensiona para máx 400×400 e comprime para caber no localStorage
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const dataUrl = ev.target.result;
-      localStorage.setItem('ps_avatar', dataUrl);
-      setAvatar(dataUrl);
-      window.dispatchEvent(new Event('ps_avatar_changed'));
-      window.showToast && window.showToast('Foto de perfil atualizada!');
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 400;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width  = Math.round(img.width  * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        try {
+          localStorage.setItem('ps_avatar', dataUrl);
+          setAvatar(dataUrl);
+          window.dispatchEvent(new Event('ps_avatar_changed'));
+          window.showToast && window.showToast('Foto de perfil atualizada!');
+        } catch {
+          window.showToast && window.showToast('Não foi possível salvar a foto.', 'error');
+        }
+      };
+      img.src = ev.target.result;
     };
     reader.readAsDataURL(file);
+    // Limpa o input para permitir re-selecionar a mesma foto
+    e.target.value = '';
   };
 
   const removeAvatar = () => {
@@ -196,11 +212,18 @@ function Settings({ theme, setTheme, userName, setUserName }) {
                   display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 700, fontSize: 34, fontFamily: 'var(--font-display)',
                   boxShadow: '0 12px 28px -12px color-mix(in oklab, var(--primary) 80%, transparent)' }}>{initial}</div>
               )}
-              <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange}/>
+              <input ref={fileRef} type="file" accept="image/*" capture="user"
+                style={{ display: 'none' }} onChange={handleFileChange}/>
+              {/* Área inteira clicável */}
+              <div onClick={() => fileRef.current.click()}
+                style={{ position: 'absolute', inset: 0, borderRadius: '50%', cursor: 'pointer',
+                  background: 'rgba(0,0,0,0)', transition: 'background 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.18)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0)'}/>
               <button className="icon-btn"
                 style={{ position: 'absolute', right: -4, bottom: -4, width: 30, height: 30, background: 'var(--bg-1)',
-                  border: '2px solid var(--line)', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
-                title="Trocar foto" onClick={() => fileRef.current.click()}>
+                  border: '2px solid var(--line)', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', pointerEvents: 'none' }}
+                title="Trocar foto">
                 <Ic.edit size={14}/>
               </button>
             </div>
