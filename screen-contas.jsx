@@ -14,8 +14,9 @@ function mesLabel(mesRef) {
 // ── ContaModal ────────────────────────────────────────────────────────────────
 function ContaModal({ conta, onSave, onDelete, onClose }) {
   const isEdit = !!conta;
+  const mesAtualDefault = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; })();
   const [f, setF] = useS(isEdit ? { ...conta } : {
-    desc: '', valor: '', dia: '', categoria: CAT_CONTAS[0], recorrente: true, ativa: true,
+    desc: '', valor: '', dia: '', categoria: CAT_CONTAS[0], recorrente: true, ativa: true, mes_ref: mesAtualDefault,
   });
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
   const valid = (f.desc||'').trim() && parseFloat(f.valor) > 0 && parseInt(f.dia) >= 1 && parseInt(f.dia) <= 31;
@@ -82,6 +83,32 @@ function ContaModal({ conta, onSave, onDelete, onClose }) {
       <p className="faint" style={{ fontSize: 11.5, margin: '4px 0 0 28px' }}>
         {f.recorrente ? 'Aparece em todos os meses automaticamente.' : 'Aparece apenas no mês selecionado.'}
       </p>
+
+      {/* Seletor de mês — só para não-recorrentes */}
+      {!f.recorrente && (
+        <div style={{ marginTop: 14 }}>
+          <label className="ev-label">Mês da conta</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 7 }}>
+            {Array.from({ length: 12 }, (_, i) => {
+              const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + i - 1);
+              const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+              const mon = d.toLocaleString('pt-BR', { month: 'short' }).replace('.','');
+              const yr  = String(d.getFullYear()).slice(2);
+              const on  = f.mes_ref === val;
+              return (
+                <button key={val} onClick={() => set('mes_ref', val)}
+                  style={{ padding: '6px 13px', borderRadius: 999, cursor: 'pointer',
+                    fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 600, transition: 'all 0.15s',
+                    border: `1px solid ${on ? 'var(--primary)' : 'var(--line)'}`,
+                    background: on ? 'color-mix(in oklab, var(--primary) 14%, transparent)' : 'transparent',
+                    color: on ? 'var(--ink)' : 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
+                  {mon}/{yr}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 22 }}>
