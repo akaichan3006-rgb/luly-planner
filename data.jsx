@@ -683,8 +683,8 @@ const ContasProgramadasStore = (() => {
       if (c.ativa === false) return false;
       // Recurring: always show
       if (c.recorrente) return true;
-      // One-time: show only if its mes_ref matches
-      return (c.mes_ref || mesRef) === mesRef;
+      // One-time: show only in the exact mes_ref saved
+      return c.mes_ref === mesRef;
     }).map(c => {
       const status = (c.historico || {})[mesRef] || 'pendente';
       const yr = parseInt(mesRef.slice(0,4));
